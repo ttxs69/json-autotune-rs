@@ -1,6 +1,6 @@
-# Benchmark Results
-# Format: stage	test	json-autotune	serde_json	ratio
-phase2	small	706ns	400ns	0.57
-phase2	medium	105µs	66µs	0.63
-phase2	large	59.6MiB/s	84.9MiB/s	0.70
-phase2	whitespace	907ns	6.87µs	7.58
+timestamp	test	autotune	serde_json	ratio	status	description
+2026-03-24_08:17	small	706ns	400ns	0.57	keep	baseline SIMD
+2026-03-24_13:50	small	457ns	296ns	0.65	keep	inline + fast path
+2026-03-24_13:52	small	438ns	296ns	0.68	keep	number module
+2026-03-24_13:52	medium	47.9µs	37.3µs	0.78	keep	number module
+2026-03-24_13:52	large	10.5MiB/s	53.1MiB/s	0.20	keep	number module

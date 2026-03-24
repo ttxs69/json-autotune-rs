@@ -11,10 +11,11 @@
 //! assert_eq!(value["name"].as_str(), Some("Alice"));
 //! ```
 
-mod parser;
+pub mod parser;
 mod value;
 mod error;
 mod simd;
+mod number;
 
 pub use value::Value;
 pub use error::Error;
