@@ -3,6 +3,10 @@ timestamp	test	autotune	serde_json	ratio	status	description
 2026-03-24_13:50	small	457ns	296ns	0.65	keep	inline + fast path
 2026-03-24_13:52	small	438ns	296ns	0.68	keep	number module
 2026-03-24_13:52	medium	47.9µs	37.3µs	0.78	keep	number module
-2026-03-24_13:52	large	10.5MiB/s	53.1MiB/s	0.20	keep	number module2026-03-24_22:42	small	361ns	296ns	0.82	keep	FxHashMap+string_opt
-2026-03-24_22:42	medium	43.3µs	36.6µs	0.84	keep	FxHashMap+string_opt
-2026-03-24_22:42	large	12.9MiB/s	53.2MiB/s	0.24	keep	FxHashMap+string_opt
+2026-03-24_13:52	large	10.5MiB/s	53.1MiB/s	0.20	keep	number module
+2026-03-24_22:42	small	361ns	296ns	0.82	keep	FxHashMap
+2026-03-24_22:42	medium	43.3µs	36.6µs	0.84	keep	FxHashMap
+2026-03-24_22:42	large	12.9MiB/s	53.2MiB/s	0.24	keep	FxHashMap
+2026-03-24_23:22	small	367ns	289ns	0.79	keep	pre-scan estimate
+2026-03-24_23:22	medium	43.9µs	38.0µs	0.86	keep	pre-scan estimate
+2026-03-24_23:22	large	44.3MiB/s	51.7MiB/s	0.86	keep	pre-scan estimate
