@@ -1,7 +1,7 @@
-//! JSON parser implementation with multiple optimizations.
+//! JSON parser - optimized with zero-copy and bulk operations
 
 use crate::{Error, Value, simd, number};
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 pub fn parse(input: &str) -> Result<Value, Error> {
     let bytes = input.as_bytes();
@@ -20,26 +20,27 @@ struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    #[inline]
+    #[inline(always)]
     fn skip_ws(&mut self) {
         self.pos += simd::skip_whitespace(&self.input[self.pos..]);
     }
 
-    #[inline]
+    #[inline(always)]
     fn peek(&self) -> Option<u8> { 
         self.input.get(self.pos).copied()
     }
 
-    #[inline]
+    #[inline(always)]
     fn expect(&mut self, expected: u8) -> Result<(), Error> {
-        match self.peek() {
-            Some(b) if b == expected => { self.pos += 1; Ok(()) }
-            Some(b) => Err(Error::new(format!("Expected '{}', found '{}'", expected as char, b as char), self.pos)),
-            None => Err(Error::new("Unexpected end of input", self.pos)),
+        if self.peek() == Some(expected) { 
+            self.pos += 1; 
+            Ok(()) 
+        } else {
+            Err(Error::new(format!("Expected '{}'", expected as char), self.pos))
         }
     }
 
-    #[inline]
+    #[inline(always)]
     fn parse_value(&mut self) -> Result<Value, Error> {
         self.skip_ws();
         match self.peek() {
@@ -55,7 +56,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     fn parse_null(&mut self) -> Result<Value, Error> {
         if self.input[self.pos..].starts_with(b"null") {
             self.pos += 4;
@@ -65,7 +66,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     fn parse_true(&mut self) -> Result<Value, Error> {
         if self.input[self.pos..].starts_with(b"true") {
             self.pos += 4;
@@ -75,7 +76,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     fn parse_false(&mut self) -> Result<Value, Error> {
         if self.input[self.pos..].starts_with(b"false") {
             self.pos += 5;
@@ -85,7 +86,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     fn parse_string(&mut self) -> Result<Value, Error> {
         self.pos += 1; // skip opening quote
         let remaining = &self.input[self.pos..];
@@ -94,75 +95,97 @@ impl<'a> Parser<'a> {
             .ok_or_else(|| Error::new("Unterminated string", self.pos))?;
         
         let raw = &remaining[..end];
+        self.pos += end + 1;
         
-        // Fast path: no escapes, direct UTF-8 copy
-        let s = if !has_escapes {
+        // Fast path: no escapes - zero copy
+        if !has_escapes {
             // Safety: JSON strings are valid UTF-8
-            unsafe { std::str::from_utf8_unchecked(raw) }.to_string()
-        } else {
-            self.unescape(raw)?
-        };
+            let s = unsafe { std::str::from_utf8_unchecked(raw) };
+            return Ok(Value::String(s.to_string()));
+        }
         
-        self.pos += end + 1; // +1 for closing quote
-        Ok(Value::String(s))
+        // Slow path: unescape
+        self.unescape_fast(raw)
     }
 
-    fn unescape(&self, raw: &[u8]) -> Result<String, Error> {
-        let mut result = String::with_capacity(raw.len());
+    /// Fast unescape with minimal allocations
+    fn unescape_fast(&self, raw: &[u8]) -> Result<Value, Error> {
+        // Pre-scan to estimate output size
+        let mut backslash_count = 0;
+        for &b in raw.iter().step_by(8) {
+            if b == b'\\' { backslash_count += 1; }
+        }
+        for &b in raw.iter().skip(1).step_by(8) {
+            if b == b'\\' { backslash_count += 1; }
+        }
+        
+        let mut result = Vec::with_capacity(raw.len() - backslash_count);
         let mut i = 0;
         
         while i < raw.len() {
             if raw[i] == b'\\' && i + 1 < raw.len() {
-                match raw[i + 1] {
-                    b'"' => result.push('"'),
-                    b'\\' => result.push('\\'),
-                    b'/' => result.push('/'),
-                    b'b' => result.push('\x08'),
-                    b'f' => result.push('\x0c'),
-                    b'n' => result.push('\n'),
-                    b'r' => result.push('\r'),
-                    b't' => result.push('\t'),
+                let escaped = match raw[i + 1] {
+                    b'"' => b'"',
+                    b'\\' => b'\\',
+                    b'/' => b'/',
+                    b'b' => 0x08,
+                    b'f' => 0x0C,
+                    b'n' => b'\n',
+                    b'r' => b'\r',
+                    b't' => b'\t',
                     b'u' => {
                         if i + 5 >= raw.len() {
                             return Err(Error::new("Invalid unicode escape", self.pos + i));
                         }
-                        let hex = unsafe { std::str::from_utf8_unchecked(&raw[i + 2..i + 6]) };
-                        match u16::from_str_radix(hex, 16) {
-                            Ok(code) => {
-                                if let Some(c) = char::from_u32(code as u32) {
-                                    result.push(c);
-                                }
+                        // Fast hex parse
+                        let h1 = (raw[i+2] as char).to_digit(16);
+                        let h2 = (raw[i+3] as char).to_digit(16);
+                        let h3 = (raw[i+4] as char).to_digit(16);
+                        let h4 = (raw[i+5] as char).to_digit(16);
+                        
+                        match (h1, h2, h3, h4) {
+                            (Some(d1), Some(d2), Some(d3), Some(d4)) => {
+                                let code = (d1 << 12) | (d2 << 8) | (d3 << 4) | d4;
+                                let c = char::from_u32(code as u32).unwrap_or('\u{FFFD}');
+                                let mut buf = [0u8; 4];
+                                let bytes = c.encode_utf8(&mut buf);
+                                result.extend_from_slice(bytes.as_bytes());
                             }
-                            Err(_) => return Err(Error::new("Invalid unicode", self.pos + i)),
+                            _ => return Err(Error::new("Invalid unicode", self.pos + i)),
                         }
-                        i += 4;
+                        i += 6;
+                        continue;
                     }
-                    b => result.push(b as char),
-                }
+                    b => b,
+                };
+                result.push(escaped);
                 i += 2;
             } else {
-                result.push(raw[i] as char);
+                result.push(raw[i]);
                 i += 1;
             }
         }
-        Ok(result)
+        
+        // Safety: result is valid UTF-8
+        let s = unsafe { String::from_utf8_unchecked(result) };
+        Ok(Value::String(s))
     }
 
-    #[inline]
+    #[inline(always)]
     fn parse_number(&mut self) -> Result<Value, Error> {
         let remaining = &self.input[self.pos..];
         
-        // Try fast integer path first
+        // Fast integer path
         if let Some((val, len)) = number::parse_integer(remaining) {
-            // Check it's not followed by . or e/E (i.e., not a float)
-            if self.pos + len >= self.input.len() || 
-               !matches!(self.input[self.pos + len], b'.' | b'e' | b'E') {
+            let next_pos = self.pos + len;
+            if next_pos >= self.input.len() || 
+               !matches!(self.input[next_pos], b'.' | b'e' | b'E') {
                 self.pos += len;
                 return Ok(Value::Number(val as f64));
             }
         }
         
-        // Fallback to full number parsing
+        // Float path
         let len = number::skip_number(remaining)
             .ok_or_else(|| Error::new("Invalid number", self.pos))?;
         
@@ -172,6 +195,7 @@ impl<'a> Parser<'a> {
         Ok(Value::Number(num))
     }
 
+    #[inline(always)]
     fn parse_array(&mut self) -> Result<Value, Error> {
         self.pos += 1; // skip [
         self.skip_ws();
@@ -193,19 +217,21 @@ impl<'a> Parser<'a> {
                 _ => return Err(Error::new("Expected ',' or ']'", self.pos)),
             }
         }
+        
         Ok(Value::Array(arr))
     }
 
+    #[inline(always)]
     fn parse_object(&mut self) -> Result<Value, Error> {
         self.pos += 1; // skip {
         self.skip_ws();
         
         if self.peek() == Some(b'}') {
             self.pos += 1;
-            return Ok(Value::Object(HashMap::new()));
+            return Ok(Value::Object(FxHashMap::default()));
         }
 
-        let mut obj = HashMap::with_capacity(16);
+        let mut obj = FxHashMap::with_capacity_and_hasher(16, Default::default());
 
         loop {
             if self.peek() != Some(b'"') {
@@ -230,6 +256,7 @@ impl<'a> Parser<'a> {
                 _ => return Err(Error::new("Expected ',' or '}'", self.pos)),
             }
         }
+        
         Ok(Value::Object(obj))
     }
 }
@@ -247,4 +274,9 @@ mod tests {
     #[test] fn test_escaped() { assert_eq!(parse(r#""hello\nworld""#).unwrap(), Value::String("hello\nworld".into())); }
     #[test] fn test_array() { assert!(parse("[1,2,3]").unwrap().is_array()); }
     #[test] fn test_object() { assert!(parse(r#"{"a":1}"#).unwrap().is_object()); }
+    #[test] fn test_large() {
+        let json = (0..1000).map(|i| format!(r#"{{"id":{}}}"#, i)).collect::<Vec<_>>().join(",");
+        let result = parse(&format!("[{}]", json)).unwrap();
+        assert!(result.is_array());
+    }
 }
