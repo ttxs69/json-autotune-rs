@@ -6,14 +6,18 @@ use rustc_hash::FxHashMap;
 pub fn parse(input: &str) -> Result<Value, Error> {
     let bytes = input.as_bytes();
     
-    // Quick scan to estimate element counts (single pass, very fast)
-    let (arr_estimate, obj_estimate) = estimate_sizes(bytes);
+    // Only pre-scan for larger JSON (skip overhead for small)
+    let (arr_capacity, obj_capacity) = if bytes.len() > 4096 {
+        estimate_sizes(bytes)
+    } else {
+        (16, 16)
+    };
     
     let mut parser = Parser { 
         input: bytes, 
         pos: 0,
-        arr_capacity: arr_estimate,
-        obj_capacity: obj_estimate,
+        arr_capacity,
+        obj_capacity,
     };
     let value = parser.parse_value()?;
     parser.skip_ws();
