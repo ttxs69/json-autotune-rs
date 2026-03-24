@@ -5,7 +5,16 @@ use rustc_hash::FxHashMap;
 
 pub fn parse(input: &str) -> Result<Value, Error> {
     let bytes = input.as_bytes();
-    let mut parser = Parser { input: bytes, pos: 0 };
+    
+    // Quick scan to estimate element counts (single pass, very fast)
+    let (arr_estimate, obj_estimate) = estimate_sizes(bytes);
+    
+    let mut parser = Parser { 
+        input: bytes, 
+        pos: 0,
+        arr_capacity: arr_estimate,
+        obj_capacity: obj_estimate,
+    };
     let value = parser.parse_value()?;
     parser.skip_ws();
     if parser.pos < parser.input.len() {
@@ -14,9 +23,46 @@ pub fn parse(input: &str) -> Result<Value, Error> {
     Ok(value)
 }
 
+/// Quick scan to estimate array/object sizes
+fn estimate_sizes(data: &[u8]) -> (usize, usize) {
+    let mut depth = 0i32;
+    let mut max_depth = 0i32;
+    let mut commas: [usize; 64] = [0; 64]; // commas at each depth
+    
+    // Sample every 8 bytes for speed
+    for &b in data.iter().step_by(4) {
+        match b {
+            b'[' | b'{' => {
+                depth += 1;
+                if depth < 64 {
+                    max_depth = max_depth.max(depth);
+                }
+            }
+            b']' | b'}' => {
+                if depth > 0 { depth -= 1; }
+            }
+            b',' => {
+                if depth > 0 && (depth as usize) < 64 {
+                    commas[depth as usize] += 1;
+                }
+            }
+            _ => {}
+        }
+    }
+    
+    // Estimate average elements per container
+    let total_commas: usize = commas.iter().sum();
+    let containers = (data.iter().filter(|&&b| b == b'[' || b == b'{').count()).max(1);
+    
+    let avg_elements = (total_commas / containers + 1).min(64);
+    (avg_elements, avg_elements)
+}
+
 struct Parser<'a> {
     input: &'a [u8],
     pos: usize,
+    arr_capacity: usize,
+    obj_capacity: usize,
 }
 
 impl<'a> Parser<'a> {
@@ -99,10 +145,7 @@ impl<'a> Parser<'a> {
         
         // Fast path: no escapes - direct string creation
         if !has_escapes {
-            // Safety: JSON strings are valid UTF-8
-            let s = unsafe { 
-                std::str::from_utf8_unchecked(raw).to_owned()
-            };
+            let s = unsafe { std::str::from_utf8_unchecked(raw).to_owned() };
             return Ok(Value::String(s));
         }
         
@@ -110,41 +153,23 @@ impl<'a> Parser<'a> {
         self.unescape_fast(raw)
     }
 
-    /// Fast unescape with minimal allocations
     fn unescape_fast(&self, raw: &[u8]) -> Result<Value, Error> {
-        // Pre-scan to estimate output size
-        let mut backslash_count = 0;
-        for &b in raw.iter().step_by(8) {
-            if b == b'\\' { backslash_count += 1; }
-        }
-        for &b in raw.iter().skip(1).step_by(8) {
-            if b == b'\\' { backslash_count += 1; }
-        }
-        
-        let mut result = Vec::with_capacity(raw.len() - backslash_count);
+        let mut result = Vec::with_capacity(raw.len());
         let mut i = 0;
         
         while i < raw.len() {
             if raw[i] == b'\\' && i + 1 < raw.len() {
                 let escaped = match raw[i + 1] {
-                    b'"' => b'"',
-                    b'\\' => b'\\',
-                    b'/' => b'/',
-                    b'b' => 0x08,
-                    b'f' => 0x0C,
-                    b'n' => b'\n',
-                    b'r' => b'\r',
-                    b't' => b'\t',
+                    b'"' => b'"', b'\\' => b'\\', b'/' => b'/',
+                    b'b' => 0x08, b'f' => 0x0C, b'n' => b'\n', b'r' => b'\r', b't' => b'\t',
                     b'u' => {
                         if i + 5 >= raw.len() {
                             return Err(Error::new("Invalid unicode escape", self.pos + i));
                         }
-                        // Fast hex parse
                         let h1 = (raw[i+2] as char).to_digit(16);
                         let h2 = (raw[i+3] as char).to_digit(16);
                         let h3 = (raw[i+4] as char).to_digit(16);
                         let h4 = (raw[i+5] as char).to_digit(16);
-                        
                         match (h1, h2, h3, h4) {
                             (Some(d1), Some(d2), Some(d3), Some(d4)) => {
                                 let code = (d1 << 12) | (d2 << 8) | (d3 << 4) | d4;
@@ -168,7 +193,6 @@ impl<'a> Parser<'a> {
             }
         }
         
-        // Safety: result is valid UTF-8
         let s = unsafe { String::from_utf8_unchecked(result) };
         Ok(Value::String(s))
     }
@@ -207,7 +231,7 @@ impl<'a> Parser<'a> {
             return Ok(Value::Array(Vec::new()));
         }
 
-        let mut arr = Vec::with_capacity(16);
+        let mut arr = Vec::with_capacity(self.arr_capacity.max(8));
 
         loop {
             arr.push(self.parse_value()?);
@@ -233,7 +257,7 @@ impl<'a> Parser<'a> {
             return Ok(Value::Object(FxHashMap::default()));
         }
 
-        let mut obj = FxHashMap::with_capacity_and_hasher(16, Default::default());
+        let mut obj = FxHashMap::with_capacity_and_hasher(self.obj_capacity.max(8), Default::default());
 
         loop {
             if self.peek() != Some(b'"') {
