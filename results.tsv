@@ -1,0 +1,6 @@
+# Benchmark Results
+# Format: stage	test	json-autotune	serde_json	ratio
+phase2	small	706ns	400ns	0.57
+phase2	medium	105µs	66µs	0.63
+phase2	large	59.6MiB/s	84.9MiB/s	0.70
+phase2	whitespace	907ns	6.87µs	7.58
