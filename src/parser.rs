@@ -97,11 +97,13 @@ impl<'a> Parser<'a> {
         let raw = &remaining[..end];
         self.pos += end + 1;
         
-        // Fast path: no escapes - zero copy
+        // Fast path: no escapes - direct string creation
         if !has_escapes {
             // Safety: JSON strings are valid UTF-8
-            let s = unsafe { std::str::from_utf8_unchecked(raw) };
-            return Ok(Value::String(s.to_string()));
+            let s = unsafe { 
+                std::str::from_utf8_unchecked(raw).to_owned()
+            };
+            return Ok(Value::String(s));
         }
         
         // Slow path: unescape
