@@ -61,7 +61,7 @@ pub fn parse_integer(data: &[u8]) -> Option<(i64, usize)> {
 
 /// Check if bytes represent a valid number and return end position.
 /// This is faster than parsing when we just need to skip.
-#[inline]
+#[inline(always)]
 pub fn skip_number(data: &[u8]) -> Option<usize> {
     if data.is_empty() { return None; }
     
@@ -73,11 +73,17 @@ pub fn skip_number(data: &[u8]) -> Option<usize> {
         if pos >= data.len() { return None; }
     }
     
-    // Integer part
-    if data[pos] == b'0' {
+    // Integer part - use direct byte comparison for speed
+    let first = data[pos];
+    if first == b'0' {
         pos += 1;
-    } else if data[pos].is_ascii_digit() {
-        while pos < data.len() && data[pos].is_ascii_digit() { pos += 1; }
+    } else if first >= b'0' && first <= b'9' {
+        pos += 1;
+        while pos < data.len() {
+            let b = data[pos];
+            if b < b'0' || b > b'9' { break; }
+            pos += 1;
+        }
     } else {
         return None;
     }
@@ -85,16 +91,30 @@ pub fn skip_number(data: &[u8]) -> Option<usize> {
     // Fraction
     if pos < data.len() && data[pos] == b'.' {
         pos += 1;
-        if pos >= data.len() || !data[pos].is_ascii_digit() { return None; }
-        while pos < data.len() && data[pos].is_ascii_digit() { pos += 1; }
+        if pos >= data.len() { return None; }
+        let b = data[pos];
+        if b < b'0' || b > b'9' { return None; }
+        pos += 1;
+        while pos < data.len() {
+            let b = data[pos];
+            if b < b'0' || b > b'9' { break; }
+            pos += 1;
+        }
     }
     
     // Exponent
     if pos < data.len() && (data[pos] == b'e' || data[pos] == b'E') {
         pos += 1;
         if pos < data.len() && (data[pos] == b'+' || data[pos] == b'-') { pos += 1; }
-        if pos >= data.len() || !data[pos].is_ascii_digit() { return None; }
-        while pos < data.len() && data[pos].is_ascii_digit() { pos += 1; }
+        if pos >= data.len() { return None; }
+        let b = data[pos];
+        if b < b'0' || b > b'9' { return None; }
+        pos += 1;
+        while pos < data.len() {
+            let b = data[pos];
+            if b < b'0' || b > b'9' { break; }
+            pos += 1;
+        }
     }
     
     Some(pos)
