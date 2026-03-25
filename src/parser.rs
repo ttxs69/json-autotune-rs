@@ -68,27 +68,20 @@ impl<'a> Parser<'a> {
         // Direct byte access for faster dispatch
         let b = unsafe { *self.input.get_unchecked(self.pos) };
         
-        // Branch-free dispatch using the first byte
-        // Most common cases first: string, number, object, array
-        if b == b'"' {
-            self.parse_string()
-        } else if b == b'{' {
-            self.parse_object()
-        } else if b == b'[' {
-            self.parse_array()
-        } else if (b as i8) >= (b'0' as i8) && (b as i8) <= (b'9' as i8) {
-            self.parse_number()
-        } else if b == b'-' {
-            self.parse_number()
-        } else if b == b't' {
-            self.parse_true()
-        } else if b == b'f' {
-            self.parse_false()
-        } else if b == b'n' {
-            self.parse_null()
-        } else {
-            Err(Error::new("Invalid char", self.pos))
-        }
+        // Use computed goto pattern - most common first
+        // String, Object, Array cover >80% of JSON values
+        if b == b'"' { return self.parse_string(); }
+        if b == b'{' { return self.parse_object(); }
+        if b == b'[' { return self.parse_array(); }
+        // Numbers (including negative)
+        if (b as i8) >= (b'0' as i8) && (b as i8) <= (b'9' as i8) { return self.parse_number(); }
+        if b == b'-' { return self.parse_number(); }
+        // Keywords
+        if b == b't' { return self.parse_true(); }
+        if b == b'f' { return self.parse_false(); }
+        if b == b'n' { return self.parse_null(); }
+        
+        Err(Error::new("Invalid char", self.pos))
     }
 
     #[inline(always)]
