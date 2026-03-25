@@ -150,7 +150,17 @@ impl<'a> Parser<'a> {
         self.pos += end + 1;
         
         if !has_escapes {
-            let s = unsafe { std::str::from_utf8_unchecked(raw).to_owned() };
+            // Fast path: directly create String from bytes
+            // This avoids intermediate Vec allocation
+            let mut s = String::with_capacity(end);
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    raw.as_ptr(),
+                    s.as_mut_ptr() as *mut u8,
+                    end
+                );
+                s.as_mut_vec().set_len(end);
+            }
             return Ok(Value::String(s));
         }
         
@@ -206,8 +216,8 @@ impl<'a> Parser<'a> {
     fn parse_number(&mut self) -> Result<Value, Error> {
         let remaining = &self.input[self.pos..];
         
+        // Fast integer path
         if let Some((val, len)) = number::parse_integer(remaining) {
-            // Check if this is a pure integer (no decimal point or exponent)
             let next_pos = self.pos + len;
             if next_pos >= self.input.len() {
                 self.pos = next_pos;
@@ -220,11 +230,13 @@ impl<'a> Parser<'a> {
             }
         }
         
+        // Use lexical-core for fast float parsing
         let len = number::skip_number(remaining)
             .ok_or_else(|| Error::new("Invalid number", self.pos))?;
         
         let s = unsafe { std::str::from_utf8_unchecked(&self.input[self.pos..self.pos + len]) };
-        let n: f64 = s.parse().map_err(|_| Error::new("Invalid number", self.pos))?;
+        let n: f64 = lexical_core::parse(s.as_bytes())
+            .map_err(|_| Error::new("Invalid number", self.pos))?;
         self.pos += len;
         Ok(Value::Number(n))
     }
