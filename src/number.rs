@@ -1,5 +1,16 @@
 //! Optimized number parsing.
 
+// Lookup table for digit values (0-9) and invalid marker (255)
+const DIGIT: [u8; 256] = {
+    let mut table = [255u8; 256];
+    let mut i = 0;
+    while i < 10 {
+        table[b'0' as usize + i] = i as u8;
+        i += 1;
+    }
+    table
+};
+
 /// Fast integer parsing - optimized for common cases.
 /// Returns (value, bytes_consumed) or None if invalid.
 #[inline(always)]
@@ -16,29 +27,28 @@ pub fn parse_integer(data: &[u8]) -> Option<(i64, usize)> {
     
     if pos >= data.len() { return None; }
     
-    // Fast path: single digit
-    let first = data[pos];
-    if first < b'0' || first > b'9' { return None; }
+    // Use lookup table for digit parsing
+    let first = DIGIT[data[pos] as usize];
+    if first == 255 { return None; }
     
-    // Fast path: parse 4 digits at once using lookup
-    let mut result: i64 = (first - b'0') as i64;
+    let mut result: i64 = first as i64;
     pos += 1;
     
     // Unrolled loop for common case (1-4 digits)
     if pos < data.len() {
-        let b = data[pos];
-        if b >= b'0' && b <= b'9' {
-            result = result * 10 + (b - b'0') as i64;
+        let d = DIGIT[data[pos] as usize];
+        if d != 255 {
+            result = result * 10 + d as i64;
             pos += 1;
             if pos < data.len() {
-                let b = data[pos];
-                if b >= b'0' && b <= b'9' {
-                    result = result * 10 + (b - b'0') as i64;
+                let d = DIGIT[data[pos] as usize];
+                if d != 255 {
+                    result = result * 10 + d as i64;
                     pos += 1;
                     if pos < data.len() {
-                        let b = data[pos];
-                        if b >= b'0' && b <= b'9' {
-                            result = result * 10 + (b - b'0') as i64;
+                        let d = DIGIT[data[pos] as usize];
+                        if d != 255 {
+                            result = result * 10 + d as i64;
                             pos += 1;
                         }
                     }
@@ -49,9 +59,9 @@ pub fn parse_integer(data: &[u8]) -> Option<(i64, usize)> {
     
     // Continue for longer numbers
     while pos < data.len() && pos < 19 {
-        let b = data[pos];
-        if b < b'0' || b > b'9' { break; }
-        result = result * 10 + (b - b'0') as i64;
+        let d = DIGIT[data[pos] as usize];
+        if d == 255 { break; }
+        result = result * 10 + d as i64;
         pos += 1;
     }
     
