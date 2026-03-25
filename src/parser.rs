@@ -59,7 +59,9 @@ impl<'a> Parser<'a> {
 
     #[inline(always)]
     fn parse_value(&mut self) -> Result<Value, Error> {
-        self.skip_ws();
+        // Inline skip_ws directly to avoid function call
+        let skip = simd::skip_whitespace(&self.input[self.pos..]);
+        self.pos += skip;
         
         if self.pos >= self.input.len() {
             return Err(Error::new("Unexpected end", self.pos));
@@ -68,7 +70,7 @@ impl<'a> Parser<'a> {
         // Direct byte access for faster dispatch
         let b = unsafe { *self.input.get_unchecked(self.pos) };
         
-        // Use likely hints for common cases (string, object, array cover >80% of JSON values)
+        // Common cases first (string, object, array cover >80% of JSON values)
         if b == b'"' { return self.parse_string(); }
         if b == b'{' { return self.parse_object(); }
         if b == b'[' { return self.parse_array(); }
