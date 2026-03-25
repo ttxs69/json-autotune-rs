@@ -9,6 +9,12 @@ use std::arch::x86_64::*;
 pub unsafe fn skip_whitespace_simd(data: &[u8]) -> usize {
     if data.len() < 16 { return skip_whitespace_scalar(data); }
 
+    // Fast check: if first byte is not whitespace, return immediately
+    let first = data[0];
+    if first != b' ' && first != b'\t' && first != b'\n' && first != b'\r' {
+        return 0;
+    }
+
     let spaces = _mm_set1_epi8(0x20);
     let tabs = _mm_set1_epi8(0x09);
     let newlines = _mm_set1_epi8(0x0a);
