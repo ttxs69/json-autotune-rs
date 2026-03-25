@@ -63,16 +63,32 @@ pub unsafe fn find_string_end_simd(data: &[u8]) -> Option<(usize, bool)> {
     let backslashes = _mm_set1_epi8(b'\\' as i8);
 
     let mut offset = 0;
-    let mut escaped = false;
     let mut has_escapes = false;
 
+    // Fast path: first scan for quote and backslash in parallel
     while offset + 16 <= data.len() {
         let chunk = _mm_loadu_si128(data.as_ptr().add(offset) as *const __m128i);
         let quote_mask = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk, quotes)) as u16;
         let backslash_mask = _mm_movemask_epi8(_mm_cmpeq_epi8(chunk, backslashes)) as u16;
         
+        // If no escape in this chunk and we found a quote, return immediately
+        if backslash_mask == 0 && quote_mask != 0 {
+            let pos = offset + quote_mask.trailing_zeros() as usize;
+            return Some((pos, has_escapes));
+        }
+        
+        // If we have escapes, mark it
         if backslash_mask != 0 { has_escapes = true; }
-
+        
+        // If no quotes and no escapes, continue
+        if quote_mask == 0 {
+            offset += 16;
+            continue;
+        }
+        
+        // Complex case: both quotes and escapes in this chunk
+        // We need to track escape state
+        let mut escaped = false;
         for i in 0..16 {
             if offset + i >= data.len() { return None; }
             if (backslash_mask >> i) & 1 != 0 { escaped = !escaped; }
@@ -84,6 +100,8 @@ pub unsafe fn find_string_end_simd(data: &[u8]) -> Option<(usize, bool)> {
         offset += 16;
     }
 
+    // Handle remaining bytes
+    let mut escaped = false;
     for i in offset..data.len() {
         if data[i] == b'\\' { escaped = !escaped; has_escapes = true; }
         else if data[i] == b'"' && !escaped { return Some((i, has_escapes)); }
