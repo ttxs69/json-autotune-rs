@@ -68,15 +68,15 @@ impl<'a> Parser<'a> {
         // Direct byte access for faster dispatch
         let b = unsafe { *self.input.get_unchecked(self.pos) };
         
-        // Use computed goto pattern - most common first
-        // String, Object, Array cover >80% of JSON values
+        // Use likely hints for common cases (string, object, array cover >80% of JSON values)
         if b == b'"' { return self.parse_string(); }
         if b == b'{' { return self.parse_object(); }
         if b == b'[' { return self.parse_array(); }
-        // Numbers (including negative)
-        if (b as i8) >= (b'0' as i8) && (b as i8) <= (b'9' as i8) { return self.parse_number(); }
+        // Numbers (positive more common than negative)
+        let d = b.wrapping_sub(b'0');
+        if d < 10 { return self.parse_number(); }
         if b == b'-' { return self.parse_number(); }
-        // Keywords
+        // Keywords (rare)
         if b == b't' { return self.parse_true(); }
         if b == b'f' { return self.parse_false(); }
         if b == b'n' { return self.parse_null(); }
