@@ -245,11 +245,12 @@ impl<'a> Parser<'a> {
     fn parse_array(&mut self) -> Result<Value, Error> {
         self.pos += 1;
         
-        // Inline skip_ws for empty array check
-        let skip = simd::skip_whitespace(&self.input[self.pos..]);
+        // Fast path: check for empty array without calling skip_ws
+        let remaining = &self.input[self.pos..];
+        let skip = simd::skip_whitespace(remaining);
         self.pos += skip;
         
-        if self.pos < self.input.len() && self.input[self.pos] == b']' {
+        if self.pos < self.input.len() && unsafe { *self.input.get_unchecked(self.pos) } == b']' {
             self.pos += 1;
             return Ok(Value::Array(Vec::new()));
         }
@@ -259,15 +260,12 @@ impl<'a> Parser<'a> {
         loop {
             arr.push(self.parse_value()?);
             
-            // Inline skip_ws after value
-            let skip = simd::skip_whitespace(&self.input[self.pos..]);
+            let remaining = &self.input[self.pos..];
+            let skip = simd::skip_whitespace(remaining);
             self.pos += skip;
             
-            if self.pos >= self.input.len() {
-                return Err(Error::new("Unclosed array", self.pos));
-            }
-            
-            let b = self.input[self.pos];
+            // Use unchecked access after skip_ws guarantees we have data
+            let b = unsafe { *self.input.get_unchecked(self.pos) };
             if b == b',' { 
                 self.pos += 1; 
             } else if b == b']' { 
@@ -285,11 +283,11 @@ impl<'a> Parser<'a> {
     fn parse_object(&mut self) -> Result<Value, Error> {
         self.pos += 1;
         
-        // Inline skip_ws for empty object check
-        let skip = simd::skip_whitespace(&self.input[self.pos..]);
+        let remaining = &self.input[self.pos..];
+        let skip = simd::skip_whitespace(remaining);
         self.pos += skip;
         
-        if self.pos < self.input.len() && self.input[self.pos] == b'}' {
+        if self.pos < self.input.len() && unsafe { *self.input.get_unchecked(self.pos) } == b'}' {
             self.pos += 1;
             return Ok(Value::Object(FxHashMap::default()));
         }
@@ -297,7 +295,8 @@ impl<'a> Parser<'a> {
         let mut obj = FxHashMap::with_capacity_and_hasher(self.obj_cap, Default::default());
 
         loop {
-            if self.pos >= self.input.len() || self.input[self.pos] != b'"' {
+            // Direct check for quote
+            if unsafe { *self.input.get_unchecked(self.pos) } != b'"' {
                 return Err(Error::new("Expected string key", self.pos));
             }
             
@@ -306,27 +305,22 @@ impl<'a> Parser<'a> {
                 _ => unreachable!(),
             };
             
-            // Inline skip_ws after key
-            let skip = simd::skip_whitespace(&self.input[self.pos..]);
+            let remaining = &self.input[self.pos..];
+            let skip = simd::skip_whitespace(remaining);
             self.pos += skip;
             
-            if self.pos >= self.input.len() || self.input[self.pos] != b':' {
+            if unsafe { *self.input.get_unchecked(self.pos) } != b':' {
                 return Err(Error::new("Expected ':'", self.pos));
             }
             self.pos += 1;
             
-            let value = self.parse_value()?;
-            obj.insert(key, value);
+            obj.insert(key, self.parse_value()?);
             
-            // Inline skip_ws after value
-            let skip = simd::skip_whitespace(&self.input[self.pos..]);
+            let remaining = &self.input[self.pos..];
+            let skip = simd::skip_whitespace(remaining);
             self.pos += skip;
             
-            if self.pos >= self.input.len() {
-                return Err(Error::new("Unclosed object", self.pos));
-            }
-            
-            let b = self.input[self.pos];
+            let b = unsafe { *self.input.get_unchecked(self.pos) };
             if b == b',' { 
                 self.pos += 1; 
             } else if b == b'}' { 
