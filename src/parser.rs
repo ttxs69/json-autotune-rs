@@ -3,6 +3,10 @@
 use crate::{Error, Value, simd, number};
 use rustc_hash::FxHashMap;
 
+// Lookup table for keyword matching (faster than memcmp for short words)
+const KEYWORD_NULL: u32 = 0x6c6c756e; // "null" as u32 (little-endian)
+const KEYWORD_TRUE: u32 = 0x65757274; // "true" as u32 (little-endian)
+
 pub fn parse(input: &str) -> Result<Value, Error> {
     let bytes = input.as_bytes();
     
@@ -90,35 +94,49 @@ impl<'a> Parser<'a> {
 
     #[inline(always)]
     fn parse_null(&mut self) -> Result<Value, Error> {
+        // Fast path: read 4 bytes as u32 and compare
         let remaining = &self.input[self.pos..];
-        if remaining.len() >= 4 && &remaining[..4] == b"null" {
-            self.pos += 4;
-            Ok(Value::Null)
-        } else {
-            Err(Error::new("Expected null", self.pos))
+        if remaining.len() >= 4 {
+            let word = unsafe {
+                u32::from_le_bytes(*(remaining.as_ptr().add(0) as *const [u8; 4]))
+            };
+            if word == KEYWORD_NULL {
+                self.pos += 4;
+                return Ok(Value::Null);
+            }
         }
+        Err(Error::new("Expected null", self.pos))
     }
 
     #[inline(always)]
     fn parse_true(&mut self) -> Result<Value, Error> {
         let remaining = &self.input[self.pos..];
-        if remaining.len() >= 4 && &remaining[..4] == b"true" {
-            self.pos += 4;
-            Ok(Value::Bool(true))
-        } else {
-            Err(Error::new("Expected true", self.pos))
+        if remaining.len() >= 4 {
+            let word = unsafe {
+                u32::from_le_bytes(*(remaining.as_ptr().add(0) as *const [u8; 4]))
+            };
+            if word == KEYWORD_TRUE {
+                self.pos += 4;
+                return Ok(Value::Bool(true));
+            }
         }
+        Err(Error::new("Expected true", self.pos))
     }
 
     #[inline(always)]
     fn parse_false(&mut self) -> Result<Value, Error> {
         let remaining = &self.input[self.pos..];
-        if remaining.len() >= 5 && &remaining[..5] == b"false" {
-            self.pos += 5;
-            Ok(Value::Bool(false))
-        } else {
-            Err(Error::new("Expected false", self.pos))
+        if remaining.len() >= 5 && remaining[0] == b'f' {
+            // Check "alse" part using u16 compare
+            let suffix = unsafe {
+                u32::from_le_bytes(*(remaining.as_ptr().add(1) as *const [u8; 4]))
+            };
+            if suffix == 0x65736c61 { // "alse" in little-endian
+                self.pos += 5;
+                return Ok(Value::Bool(false));
+            }
         }
+        Err(Error::new("Expected false", self.pos))
     }
 
     #[inline(always)]
@@ -209,9 +227,12 @@ impl<'a> Parser<'a> {
     #[inline(always)]
     fn parse_array(&mut self) -> Result<Value, Error> {
         self.pos += 1;
-        self.skip_ws();
         
-        if !self.at_end() && self.peek() == b']' {
+        // Inline skip_ws for empty array check
+        let skip = simd::skip_whitespace(&self.input[self.pos..]);
+        self.pos += skip;
+        
+        if self.pos < self.input.len() && self.input[self.pos] == b']' {
             self.pos += 1;
             return Ok(Value::Array(Vec::new()));
         }
@@ -220,16 +241,23 @@ impl<'a> Parser<'a> {
 
         loop {
             arr.push(self.parse_value()?);
-            self.skip_ws();
             
-            if self.at_end() {
+            // Inline skip_ws after value
+            let skip = simd::skip_whitespace(&self.input[self.pos..]);
+            self.pos += skip;
+            
+            if self.pos >= self.input.len() {
                 return Err(Error::new("Unclosed array", self.pos));
             }
             
-            match self.peek() {
-                b',' => { self.pos += 1; self.skip_ws(); }
-                b']' => { self.pos += 1; break; }
-                _ => return Err(Error::new("Expected ',' or ']'", self.pos)),
+            let b = self.input[self.pos];
+            if b == b',' { 
+                self.pos += 1; 
+            } else if b == b']' { 
+                self.pos += 1; 
+                break;
+            } else {
+                return Err(Error::new("Expected ',' or ']'", self.pos));
             }
         }
         
@@ -239,9 +267,12 @@ impl<'a> Parser<'a> {
     #[inline(always)]
     fn parse_object(&mut self) -> Result<Value, Error> {
         self.pos += 1;
-        self.skip_ws();
         
-        if !self.at_end() && self.peek() == b'}' {
+        // Inline skip_ws for empty object check
+        let skip = simd::skip_whitespace(&self.input[self.pos..]);
+        self.pos += skip;
+        
+        if self.pos < self.input.len() && self.input[self.pos] == b'}' {
             self.pos += 1;
             return Ok(Value::Object(FxHashMap::default()));
         }
@@ -249,7 +280,7 @@ impl<'a> Parser<'a> {
         let mut obj = FxHashMap::with_capacity_and_hasher(self.obj_cap, Default::default());
 
         loop {
-            if self.at_end() || self.peek() != b'"' {
+            if self.pos >= self.input.len() || self.input[self.pos] != b'"' {
                 return Err(Error::new("Expected string key", self.pos));
             }
             
@@ -258,24 +289,34 @@ impl<'a> Parser<'a> {
                 _ => unreachable!(),
             };
             
-            self.skip_ws();
-            if self.at_end() || self.peek() != b':' {
+            // Inline skip_ws after key
+            let skip = simd::skip_whitespace(&self.input[self.pos..]);
+            self.pos += skip;
+            
+            if self.pos >= self.input.len() || self.input[self.pos] != b':' {
                 return Err(Error::new("Expected ':'", self.pos));
             }
             self.pos += 1;
-            self.skip_ws();
             
-            obj.insert(key, self.parse_value()?);
-            self.skip_ws();
+            let value = self.parse_value()?;
+            obj.insert(key, value);
             
-            if self.at_end() {
+            // Inline skip_ws after value
+            let skip = simd::skip_whitespace(&self.input[self.pos..]);
+            self.pos += skip;
+            
+            if self.pos >= self.input.len() {
                 return Err(Error::new("Unclosed object", self.pos));
             }
             
-            match self.peek() {
-                b',' => { self.pos += 1; self.skip_ws(); }
-                b'}' => { self.pos += 1; break; }
-                _ => return Err(Error::new("Expected ',' or '}'", self.pos)),
+            let b = self.input[self.pos];
+            if b == b',' { 
+                self.pos += 1; 
+            } else if b == b'}' { 
+                self.pos += 1; 
+                break;
+            } else {
+                return Err(Error::new("Expected ',' or '}'", self.pos));
             }
         }
         

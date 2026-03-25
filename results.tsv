@@ -9,4 +9,6 @@ timestamp	test	autotune	serde_json	ratio	status	description
 2026-03-24_22:42	large	12.9MiB/s	53.2MiB/s	0.24	keep	FxHashMap
 2026-03-24_23:22	small	367ns	289ns	0.79	keep	pre-scan estimate
 2026-03-24_23:22	medium	43.9µs	38.0µs	0.86	keep	pre-scan estimate
-2026-03-24_23:22	large	44.3MiB/s	51.7MiB/s	0.86	keep	pre-scan estimate
+2026-03-24_23:22	large	44.3MiB/s	51.7MiB/s	0.86	keep	pre-scan estimate2026-03-25_08:05	small	352ns	302ns	0.86	keep	inline skip_ws array+object
+2026-03-25_08:05	medium	42.7µs	37.3µs	0.87	keep	inline skip_ws
+2026-03-25_08:05	large	46.7MiB/s	50.6MiB/s	0.92	keep	inline skip_ws

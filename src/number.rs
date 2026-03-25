@@ -1,8 +1,8 @@
 //! Optimized number parsing.
 
-/// Fast integer parsing using SIMD-like techniques.
+/// Fast integer parsing - optimized for common cases.
 /// Returns (value, bytes_consumed) or None if invalid.
-#[inline]
+#[inline(always)]
 pub fn parse_integer(data: &[u8]) -> Option<(i64, usize)> {
     if data.is_empty() { return None; }
     
@@ -16,18 +16,44 @@ pub fn parse_integer(data: &[u8]) -> Option<(i64, usize)> {
     
     if pos >= data.len() { return None; }
     
-    // Fast path: parse up to 8 digits at once
-    let mut result: i64 = 0;
-    let start = pos;
+    // Fast path: single digit
+    let first = data[pos];
+    if first < b'0' || first > b'9' { return None; }
     
-    while pos < data.len() && pos - start < 19 {  // i64 max 19 digits
+    // Fast path: parse 4 digits at once using lookup
+    let mut result: i64 = (first - b'0') as i64;
+    pos += 1;
+    
+    // Unrolled loop for common case (1-4 digits)
+    if pos < data.len() {
         let b = data[pos];
-        if !(b'0'..=b'9').contains(&b) { break; }
+        if b >= b'0' && b <= b'9' {
+            result = result * 10 + (b - b'0') as i64;
+            pos += 1;
+            if pos < data.len() {
+                let b = data[pos];
+                if b >= b'0' && b <= b'9' {
+                    result = result * 10 + (b - b'0') as i64;
+                    pos += 1;
+                    if pos < data.len() {
+                        let b = data[pos];
+                        if b >= b'0' && b <= b'9' {
+                            result = result * 10 + (b - b'0') as i64;
+                            pos += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Continue for longer numbers
+    while pos < data.len() && pos < 19 {
+        let b = data[pos];
+        if b < b'0' || b > b'9' { break; }
         result = result * 10 + (b - b'0') as i64;
         pos += 1;
     }
-    
-    if pos == start { return None; }  // No digits
     
     if negative { result = -result; }
     Some((result, pos))
