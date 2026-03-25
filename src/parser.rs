@@ -65,31 +65,25 @@ impl<'a> Parser<'a> {
 
     #[inline(always)]
     fn parse_value(&mut self) -> Result<Value, Error> {
-        // Inline skip_ws directly to avoid function call
+        // Inline skip_ws directly
         let skip = simd::skip_whitespace(&self.input[self.pos..]);
         self.pos += skip;
         
-        if self.pos >= self.input.len() {
-            return Err(Error::new("Unexpected end", self.pos));
-        }
-        
-        // Direct byte access for faster dispatch
+        // Use get_unchecked for faster byte access
         let b = unsafe { *self.input.get_unchecked(self.pos) };
         
-        // Common cases first (string, object, array cover >80% of JSON values)
-        if b == b'"' { return self.parse_string(); }
-        if b == b'{' { return self.parse_object(); }
-        if b == b'[' { return self.parse_array(); }
-        // Numbers (positive more common than negative)
-        let d = b.wrapping_sub(b'0');
-        if d < 10 { return self.parse_number(); }
-        if b == b'-' { return self.parse_number(); }
-        // Keywords (rare)
-        if b == b't' { return self.parse_true(); }
-        if b == b'f' { return self.parse_false(); }
-        if b == b'n' { return self.parse_null(); }
-        
-        Err(Error::new("Invalid char", self.pos))
+        // Fast dispatch - most common first
+        match b {
+            b'"' => self.parse_string(),
+            b'{' => self.parse_object(),
+            b'[' => self.parse_array(),
+            b'0'..=b'9' => self.parse_number(),
+            b'-' => self.parse_number(),
+            b't' => self.parse_true(),
+            b'f' => self.parse_false(),
+            b'n' => self.parse_null(),
+            _ => Err(Error::new("Invalid char", self.pos)),
+        }
     }
 
     #[inline(always)]
