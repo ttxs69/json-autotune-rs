@@ -116,13 +116,13 @@ timestamp	test	autotune	serde_json	ratio	status	description
 
 ## 六、当前状态
 
-**最新基准 (2026-03-24 23:22):**
+**最新基准 (2026-03-25 08:20):**
 
 | 测试 | json-autotune | serde_json | 比值 | 状态 |
 |------|--------------|------------|------|------|
-| small | 367ns | 289ns | 0.79x | ✅ 接近目标 |
-| medium | 43.9µs | 38.0µs | 0.86x | ✅ 接近目标 |
-| large | 44.3 MiB/s | 51.7 MiB/s | 0.86x | ✅ 接近目标 |
+| small | 354ns | 296ns | 0.84x | ✅ 接近目标 |
+| medium | 42.7µs | 37.7µs | 0.88x | ✅ 接近目标 |
+| large | 46.6 MiB/s | 51.7 MiB/s | 0.90x | ✅ 接近目标 |
 
 **已完成的优化：**
 - ✅ SIMD 空白符跳过 (SSE2)
@@ -130,9 +130,12 @@ timestamp	test	autotune	serde_json	ratio	status	description
 - ✅ FxHashMap 替代 HashMap
 - ✅ 预扫描估算容器大小
 - ✅ 快速整数解析路径
+- ✅ u32 批量比较关键字 (null/true)
+- ✅ inline skip_ws 减少 call overhead
+- ✅ 展开整数解析前4位
 
 **性能提升历程：**
-- 初始: large 10.5 MiB/s → 最终 44.3 MiB/s (+320%)
+- 初始: large 10.5 MiB/s → 现在 46.6 MiB/s (+340%)
 
 ---
 

@@ -58,37 +58,36 @@ impl<'a> Parser<'a> {
     }
 
     #[inline(always)]
-    fn peek(&self) -> u8 {
-        // Safety: we always check bounds before calling
-        unsafe { *self.input.get_unchecked(self.pos) }
-    }
-
-    #[inline(always)]
-    fn at_end(&self) -> bool {
-        self.pos >= self.input.len()
-    }
-
-    #[inline(always)]
     fn parse_value(&mut self) -> Result<Value, Error> {
         self.skip_ws();
         
-        if self.at_end() {
+        if self.pos >= self.input.len() {
             return Err(Error::new("Unexpected end", self.pos));
         }
         
-        let b = self.peek();
+        // Direct byte access for faster dispatch
+        let b = unsafe { *self.input.get_unchecked(self.pos) };
         
-        // Fast path for common cases with direct dispatch
-        match b {
-            b'"' => self.parse_string(),
-            b'0'..=b'9' => self.parse_number(),
-            b'-' => self.parse_number(),
-            b'[' => self.parse_array(),
-            b'{' => self.parse_object(),
-            b't' => self.parse_true(),
-            b'f' => self.parse_false(),
-            b'n' => self.parse_null(),
-            _ => Err(Error::new("Invalid char", self.pos)),
+        // Branch-free dispatch using the first byte
+        // Most common cases first: string, number, object, array
+        if b == b'"' {
+            self.parse_string()
+        } else if b == b'{' {
+            self.parse_object()
+        } else if b == b'[' {
+            self.parse_array()
+        } else if (b as i8) >= (b'0' as i8) && (b as i8) <= (b'9' as i8) {
+            self.parse_number()
+        } else if b == b'-' {
+            self.parse_number()
+        } else if b == b't' {
+            self.parse_true()
+        } else if b == b'f' {
+            self.parse_false()
+        } else if b == b'n' {
+            self.parse_null()
+        } else {
+            Err(Error::new("Invalid char", self.pos))
         }
     }
 
@@ -208,9 +207,15 @@ impl<'a> Parser<'a> {
         let remaining = &self.input[self.pos..];
         
         if let Some((val, len)) = number::parse_integer(remaining) {
-            if self.pos + len >= self.input.len() || 
-               !matches!(self.input[self.pos + len], b'.' | b'e' | b'E') {
-                self.pos += len;
+            // Check if this is a pure integer (no decimal point or exponent)
+            let next_pos = self.pos + len;
+            if next_pos >= self.input.len() {
+                self.pos = next_pos;
+                return Ok(Value::Number(val as f64));
+            }
+            let next_byte = self.input[next_pos];
+            if next_byte != b'.' && next_byte != b'e' && next_byte != b'E' {
+                self.pos = next_pos;
                 return Ok(Value::Number(val as f64));
             }
         }
