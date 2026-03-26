@@ -91,10 +91,9 @@ impl<'a> Parser<'a> {
     #[inline(always)]
     fn parse_null(&mut self) -> Result<Value, Error> {
         // Fast path: read 4 bytes as u32 and compare
-        let remaining = &self.input[self.pos..];
-        if remaining.len() >= 4 {
+        if self.pos + 4 <= self.input.len() {
             let word = unsafe {
-                u32::from_le_bytes(*(remaining.as_ptr().add(0) as *const [u8; 4]))
+                u32::from_le_bytes(*(self.input.as_ptr().add(self.pos) as *const [u8; 4]))
             };
             if word == KEYWORD_NULL {
                 self.pos += 4;
@@ -106,10 +105,9 @@ impl<'a> Parser<'a> {
 
     #[inline(always)]
     fn parse_true(&mut self) -> Result<Value, Error> {
-        let remaining = &self.input[self.pos..];
-        if remaining.len() >= 4 {
+        if self.pos + 4 <= self.input.len() {
             let word = unsafe {
-                u32::from_le_bytes(*(remaining.as_ptr().add(0) as *const [u8; 4]))
+                u32::from_le_bytes(*(self.input.as_ptr().add(self.pos) as *const [u8; 4]))
             };
             if word == KEYWORD_TRUE {
                 self.pos += 4;
@@ -121,15 +119,16 @@ impl<'a> Parser<'a> {
 
     #[inline(always)]
     fn parse_false(&mut self) -> Result<Value, Error> {
-        let remaining = &self.input[self.pos..];
-        if remaining.len() >= 5 && remaining[0] == b'f' {
-            // Check "alse" part using u16 compare
-            let suffix = unsafe {
-                u32::from_le_bytes(*(remaining.as_ptr().add(1) as *const [u8; 4]))
-            };
-            if suffix == 0x65736c61 { // "alse" in little-endian
-                self.pos += 5;
-                return Ok(Value::Bool(false));
+        if self.pos + 5 <= self.input.len() {
+            let first = unsafe { *self.input.get_unchecked(self.pos) };
+            if first == b'f' {
+                let suffix = unsafe {
+                    u32::from_le_bytes(*(self.input.as_ptr().add(self.pos + 1) as *const [u8; 4]))
+                };
+                if suffix == 0x65736c61 { // "alse" in little-endian
+                    self.pos += 5;
+                    return Ok(Value::Bool(false));
+                }
             }
         }
         Err(Error::new("Expected false", self.pos))
