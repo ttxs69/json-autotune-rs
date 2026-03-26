@@ -215,7 +215,7 @@ impl<'a> Parser<'a> {
 
     #[inline(always)]
     fn parse_number(&mut self) -> Result<Value, Error> {
-        let remaining = &self.input[self.pos..];
+        let remaining = unsafe { self.input.get_unchecked(self.pos..) };
         
         // Fast integer path
         if let Some((val, len)) = number::parse_integer(remaining) {
@@ -224,7 +224,7 @@ impl<'a> Parser<'a> {
                 self.pos = next_pos;
                 return Ok(Value::Number(val as f64));
             }
-            let next_byte = self.input[next_pos];
+            let next_byte = unsafe { *self.input.get_unchecked(next_pos) };
             if next_byte != b'.' && next_byte != b'e' && next_byte != b'E' {
                 self.pos = next_pos;
                 return Ok(Value::Number(val as f64));
@@ -235,7 +235,7 @@ impl<'a> Parser<'a> {
         let len = number::skip_number(remaining)
             .ok_or_else(|| Error::new("Invalid number", self.pos))?;
         
-        let s = unsafe { std::str::from_utf8_unchecked(&self.input[self.pos..self.pos + len]) };
+        let s = unsafe { std::str::from_utf8_unchecked(self.input.get_unchecked(self.pos..self.pos + len)) };
         let n: f64 = lexical_core::parse(s.as_bytes())
             .map_err(|_| Error::new("Invalid number", self.pos))?;
         self.pos += len;
