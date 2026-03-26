@@ -68,7 +68,12 @@ impl<'a> Parser<'a> {
         // Inline skip_ws directly
         let skip = simd::skip_whitespace(&self.input[self.pos..]);
         self.pos += skip;
-        
+        self.parse_value_inner()
+    }
+
+    /// Parse value without skipping whitespace first (caller already did)
+    #[inline(always)]
+    fn parse_value_inner(&mut self) -> Result<Value, Error> {
         // Use get_unchecked for faster byte access
         let b = unsafe { *self.input.get_unchecked(self.pos) };
         
@@ -253,7 +258,7 @@ impl<'a> Parser<'a> {
         let mut arr = Vec::with_capacity(self.arr_cap);
 
         loop {
-            arr.push(self.parse_value()?);
+            arr.push(self.parse_value_inner()?);
             
             let remaining = &self.input[self.pos..];
             let skip = simd::skip_whitespace(remaining);
@@ -313,7 +318,12 @@ impl<'a> Parser<'a> {
             }
             self.pos += 1;
             
-            obj.insert(key, self.parse_value()?);
+            // Skip whitespace before value, then use parse_value_inner (avoids double skip)
+            let remaining = &self.input[self.pos..];
+            let skip_ws = simd::skip_whitespace(remaining);
+            self.pos += skip_ws;
+            
+            obj.insert(key, self.parse_value_inner()?);
             
             let remaining = &self.input[self.pos..];
             let skip = simd::skip_whitespace(remaining);
