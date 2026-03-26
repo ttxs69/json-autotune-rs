@@ -141,17 +141,18 @@ impl<'a> Parser<'a> {
     #[inline(always)]
     fn parse_string(&mut self) -> Result<Value, Error> {
         self.pos += 1; // skip quote
-        let remaining = &self.input[self.pos..];
+        
+        // Use get_unchecked for faster slice access
+        let remaining = unsafe { self.input.get_unchecked(self.pos..) };
         
         let (end, has_escapes) = simd::find_string_end(remaining)
             .ok_or_else(|| Error::new("Unterminated string", self.pos))?;
         
-        let raw = &remaining[..end];
+        let raw = unsafe { remaining.get_unchecked(..end) };
         self.pos += end + 1;
         
         if !has_escapes {
             // Fast path: directly create String from bytes
-            // This avoids intermediate Vec allocation
             let mut s = String::with_capacity(end);
             unsafe {
                 std::ptr::copy_nonoverlapping(
