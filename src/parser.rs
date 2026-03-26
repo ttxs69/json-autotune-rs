@@ -287,7 +287,8 @@ impl<'a> Parser<'a> {
             return Ok(Value::Object(FxHashMap::default()));
         }
 
-        let mut obj = FxHashMap::with_capacity_and_hasher(self.obj_cap, Default::default());
+        // Start with small capacity, grow as needed
+        let mut obj = FxHashMap::with_capacity_and_hasher(8, Default::default());
 
         loop {
             // Direct check for quote
