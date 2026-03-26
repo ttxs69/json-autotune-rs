@@ -10,13 +10,8 @@ const KEYWORD_TRUE: u32 = 0x65757274; // "true" as u32 (little-endian)
 pub fn parse(input: &str) -> Result<Value, Error> {
     let bytes = input.as_bytes();
     
-    let (arr_cap, obj_cap) = if bytes.len() > 4096 {
-        estimate_sizes(bytes)
-    } else {
-        (16, 16)
-    };
-    
-    let mut p = Parser { input: bytes, pos: 0, arr_cap, obj_cap };
+    // Fixed capacity - estimation overhead not worth it for most cases
+    let mut p = Parser { input: bytes, pos: 0, arr_cap: 8, obj_cap: 8 };
     let v = p.parse_value()?;
     p.skip_ws();
     if p.pos < p.input.len() {
