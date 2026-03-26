@@ -20,7 +20,7 @@ pub fn parse_integer(data: &[u8]) -> Option<(i64, usize)> {
     let mut negative = false;
     let mut pos = 0;
     
-    if data[0] == b'-' {
+    if unsafe { *data.get_unchecked(0) } == b'-' {
         negative = true;
         pos = 1;
     }
@@ -28,7 +28,7 @@ pub fn parse_integer(data: &[u8]) -> Option<(i64, usize)> {
     if pos >= data.len() { return None; }
     
     // Use lookup table for digit parsing
-    let first = DIGIT[data[pos] as usize];
+    let first = DIGIT[unsafe { *data.get_unchecked(pos) } as usize];
     if first == 255 { return None; }
     
     let mut result: i64 = first as i64;
@@ -36,17 +36,17 @@ pub fn parse_integer(data: &[u8]) -> Option<(i64, usize)> {
     
     // Unrolled loop for common case (1-4 digits)
     if pos < data.len() {
-        let d = DIGIT[data[pos] as usize];
+        let d = DIGIT[unsafe { *data.get_unchecked(pos) } as usize];
         if d != 255 {
             result = result * 10 + d as i64;
             pos += 1;
             if pos < data.len() {
-                let d = DIGIT[data[pos] as usize];
+                let d = DIGIT[unsafe { *data.get_unchecked(pos) } as usize];
                 if d != 255 {
                     result = result * 10 + d as i64;
                     pos += 1;
                     if pos < data.len() {
-                        let d = DIGIT[data[pos] as usize];
+                        let d = DIGIT[unsafe { *data.get_unchecked(pos) } as usize];
                         if d != 255 {
                             result = result * 10 + d as i64;
                             pos += 1;
@@ -59,7 +59,7 @@ pub fn parse_integer(data: &[u8]) -> Option<(i64, usize)> {
     
     // Continue for longer numbers
     while pos < data.len() && pos < 19 {
-        let d = DIGIT[data[pos] as usize];
+        let d = DIGIT[unsafe { *data.get_unchecked(pos) } as usize];
         if d == 255 { break; }
         result = result * 10 + d as i64;
         pos += 1;
