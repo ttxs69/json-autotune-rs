@@ -47,13 +47,19 @@ pub fn skip_whitespace_simd(data: &[u8]) -> usize {
 }
 
 pub fn skip_whitespace_scalar(data: &[u8]) -> usize {
-    // Simple byte comparisons - faster than matches! macro
-    for (i, &b) in data.iter().enumerate() {
+    // Pointer-based iteration for maximum speed
+    let ptr = data.as_ptr();
+    let len = data.len();
+    let mut i = 0;
+    
+    while i < len {
+        let b = unsafe { *ptr.add(i) };
         if b != b' ' && b != b'\t' && b != b'\n' && b != b'\r' {
             return i;
         }
+        i += 1;
     }
-    data.len()
+    len
 }
 
 pub fn skip_whitespace(data: &[u8]) -> usize {
