@@ -78,13 +78,13 @@ pub fn skip_number(data: &[u8]) -> Option<usize> {
     let mut pos = 0;
     
     // Optional sign
-    if data[pos] == b'-' {
+    if unsafe { *data.get_unchecked(pos) } == b'-' {
         pos += 1;
         if pos >= data.len() { return None; }
     }
     
     // Integer part - use lookup table
-    let first = DIGIT[data[pos] as usize];
+    let first = DIGIT[unsafe { *data.get_unchecked(pos) } as usize];
     if first == 255 { return None; }
     
     if first == 0 {
@@ -92,38 +92,44 @@ pub fn skip_number(data: &[u8]) -> Option<usize> {
     } else {
         pos += 1;
         while pos < data.len() {
-            let d = DIGIT[data[pos] as usize];
+            let d = DIGIT[unsafe { *data.get_unchecked(pos) } as usize];
             if d == 255 { break; }
             pos += 1;
         }
     }
     
     // Fraction
-    if pos < data.len() && data[pos] == b'.' {
+    if pos < data.len() && unsafe { *data.get_unchecked(pos) } == b'.' {
         pos += 1;
         if pos >= data.len() { return None; }
-        let d = DIGIT[data[pos] as usize];
+        let d = DIGIT[unsafe { *data.get_unchecked(pos) } as usize];
         if d == 255 { return None; }
         pos += 1;
         while pos < data.len() {
-            let d = DIGIT[data[pos] as usize];
+            let d = DIGIT[unsafe { *data.get_unchecked(pos) } as usize];
             if d == 255 { break; }
             pos += 1;
         }
     }
     
     // Exponent
-    if pos < data.len() && (data[pos] == b'e' || data[pos] == b'E') {
-        pos += 1;
-        if pos < data.len() && (data[pos] == b'+' || data[pos] == b'-') { pos += 1; }
-        if pos >= data.len() { return None; }
-        let d = DIGIT[data[pos] as usize];
-        if d == 255 { return None; }
-        pos += 1;
-        while pos < data.len() {
-            let d = DIGIT[data[pos] as usize];
-            if d == 255 { break; }
+    if pos < data.len() {
+        let b = unsafe { *data.get_unchecked(pos) };
+        if b == b'e' || b == b'E' {
             pos += 1;
+            if pos < data.len() {
+                let b = unsafe { *data.get_unchecked(pos) };
+                if b == b'+' || b == b'-' { pos += 1; }
+            }
+            if pos >= data.len() { return None; }
+            let d = DIGIT[unsafe { *data.get_unchecked(pos) } as usize];
+            if d == 255 { return None; }
+            pos += 1;
+            while pos < data.len() {
+                let d = DIGIT[unsafe { *data.get_unchecked(pos) } as usize];
+                if d == 255 { break; }
+                pos += 1;
+            }
         }
     }
     
