@@ -249,8 +249,6 @@ impl<'a> Parser<'a> {
     #[inline(always)]
     fn parse_object(&mut self) -> Result<Value, Error> {
         self.pos += 1;
-        
-        // Inline skip_ws
         self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
         
         if self.pos < self.input.len() && unsafe { *self.input.get_unchecked(self.pos) } == b'}' {
@@ -258,11 +256,10 @@ impl<'a> Parser<'a> {
             return Ok(Value::Object(FxHashMap::default()));
         }
 
-        // Start with small capacity, grow as needed
-        let mut obj = FxHashMap::with_capacity_and_hasher(8, Default::default());
+        // Pre-allocate with capacity 3 - most JSON objects are small (avg ~3 fields)
+        let mut obj = FxHashMap::with_capacity_and_hasher(3, Default::default());
 
         loop {
-            // Direct check for quote
             if unsafe { *self.input.get_unchecked(self.pos) } != b'"' {
                 return Err(Error::new("Expected string key", self.pos));
             }
@@ -272,26 +269,21 @@ impl<'a> Parser<'a> {
                 _ => unreachable!(),
             };
             
-            // Inline skip_ws
             self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
             
             if unsafe { *self.input.get_unchecked(self.pos) } != b':' {
                 return Err(Error::new("Expected ':'", self.pos));
             }
             self.pos += 1;
-            
-            // Inline skip_ws before value
             self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
             
             obj.insert(key, self.parse_value_inner()?);
             
-            // Inline skip_ws after value
             self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
             
             let b = unsafe { *self.input.get_unchecked(self.pos) };
             if b == b',' { 
                 self.pos += 1;
-                // Inline skip_ws after comma
                 self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
             } else if b == b'}' { 
                 self.pos += 1; 
