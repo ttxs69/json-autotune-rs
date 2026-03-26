@@ -136,13 +136,7 @@ pub fn skip_number(data: &[u8]) -> Option<usize> {
     Some(pos)
 }
 
-/// Fast f64 parsing with integer fast path.
-#[inline]
-pub fn parse_f64(data: &[u8]) -> Option<f64> {
-    let len = skip_number(data)?;
-    let s = unsafe { std::str::from_utf8_unchecked(&data[..len]) };
-    s.parse().ok()
-}
+// Note: parse_f64 removed - use lexical-core directly for float parsing
 
 #[cfg(test)]
 mod tests {

@@ -10,8 +10,8 @@ const KEYWORD_TRUE: u32 = 0x65757274; // "true" as u32 (little-endian)
 pub fn parse(input: &str) -> Result<Value, Error> {
     let bytes = input.as_bytes();
     
-    // Fixed capacity - estimation overhead not worth it for most cases
-    let mut p = Parser { input: bytes, pos: 0, arr_cap: 8, obj_cap: 8 };
+    // Minimal Parser struct for fast parsing
+    let mut p = Parser { input: bytes, pos: 0 };
     let v = p.parse_value()?;
     p.skip_ws();
     if p.pos < p.input.len() {
@@ -20,32 +20,9 @@ pub fn parse(input: &str) -> Result<Value, Error> {
     Ok(v)
 }
 
-#[inline]
-fn estimate_sizes(data: &[u8]) -> (usize, usize) {
-    // Skip estimation for small files - use defaults
-    if data.len() < 16384 {
-        return (16, 16);
-    }
-    
-    let mut commas = 0usize;
-    let mut containers = 0usize;
-    
-    // Sample first byte of each 16-byte chunk (faster)
-    for chunk in data.chunks(16) {
-        let b = chunk[0];
-        if b == b'[' || b == b'{' { containers += 1; }
-        else if b == b',' { commas += 1; }
-    }
-    
-    let avg = if containers > 0 { (commas / containers + 1).min(32) } else { 16 };
-    (avg, avg)
-}
-
 struct Parser<'a> {
     input: &'a [u8],
     pos: usize,
-    arr_cap: usize,
-    obj_cap: usize,
 }
 
 impl<'a> Parser<'a> {

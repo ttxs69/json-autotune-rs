@@ -62,9 +62,22 @@ pub fn skip_whitespace_scalar(data: &[u8]) -> usize {
     len
 }
 
+// Inline the feature check - compiler can optimize this better
+#[inline(always)]
 pub fn skip_whitespace(data: &[u8]) -> usize {
     #[cfg(target_arch = "x86_64")]
-    { if is_x86_feature_detected!("sse2") { unsafe { skip_whitespace_simd(data) } } else { skip_whitespace_scalar(data) } }
+    {
+        if data.len() < 16 { return skip_whitespace_scalar(data); }
+        
+        // Fast check: if first byte is not whitespace, return immediately
+        // This avoids SIMD overhead for the common case of no whitespace
+        let first = unsafe { *data.as_ptr() };
+        if first != b' ' && first != b'\t' && first != b'\n' && first != b'\r' {
+            return 0;
+        }
+        
+        unsafe { skip_whitespace_simd(data) }
+    }
     #[cfg(not(target_arch = "x86_64"))]
     { skip_whitespace_scalar(data) }
 }
@@ -151,62 +164,4 @@ pub fn find_string_end(data: &[u8]) -> Option<(usize, bool)> {
     { find_string_end_scalar(data) }
 }
 
-/// Check if a byte is a structural character.
-#[inline]
-pub fn is_structural(b: u8) -> bool {
-    matches!(b, b'{' | b'}' | b'[' | b']' | b',' | b':')
-}
-
-/// Find next structural character using SIMD.
-#[cfg(target_arch = "x86_64")]
-#[target_feature(enable = "sse2")]
-pub unsafe fn find_structural_simd(data: &[u8]) -> Option<usize> {
-    if data.len() < 16 {
-        return data.iter().position(|&b| is_structural(b));
-    }
-
-    let openc = _mm_set1_epi8(b'{' as i8);
-    let closec = _mm_set1_epi8(b'}' as i8);
-    let openb = _mm_set1_epi8(b'[' as i8);
-    let closeb = _mm_set1_epi8(b']' as i8);
-    let comma = _mm_set1_epi8(b',' as i8);
-    let colon = _mm_set1_epi8(b':' as i8);
-
-    let mut offset = 0;
-    let chunks = data.len() / 16;
-
-    for _ in 0..chunks {
-        let chunk = _mm_loadu_si128(data.as_ptr().add(offset) as *const __m128i);
-        
-        let m0 = _mm_or_si128(_mm_cmpeq_epi8(chunk, openc), _mm_cmpeq_epi8(chunk, closec));
-        let m1 = _mm_or_si128(_mm_cmpeq_epi8(chunk, openb), _mm_cmpeq_epi8(chunk, closeb));
-        let m2 = _mm_or_si128(_mm_cmpeq_epi8(chunk, comma), _mm_cmpeq_epi8(chunk, colon));
-        let combined = _mm_or_si128(_mm_or_si128(m0, m1), m2);
-        
-        let mask = _mm_movemask_epi8(combined) as u16;
-        
-        if mask != 0 {
-            return Some(offset + mask.trailing_zeros() as usize);
-        }
-        offset += 16;
-    }
-
-    data[offset..].iter().position(|&b| is_structural(b)).map(|p| offset + p)
-}
-
-#[cfg(not(target_arch = "x86_64"))]
-pub fn find_structural_simd(data: &[u8]) -> Option<usize> {
-    data.iter().position(|&b| is_structural(b))
-}
-
-#[inline]
-pub fn find_structural(data: &[u8]) -> Option<usize> {
-    #[cfg(target_arch = "x86_64")]
-    { if is_x86_feature_detected!("sse2") { unsafe { find_structural_simd(data) } } else { find_structural_scalar(data) } }
-    #[cfg(not(target_arch = "x86_64"))]
-    { find_structural_scalar(data) }
-}
-
-pub fn find_structural_scalar(data: &[u8]) -> Option<usize> {
-    data.iter().position(|&b| is_structural(b))
-}
+// Note: structural character finding removed - not used in current implementation
