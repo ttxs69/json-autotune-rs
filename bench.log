@@ -1,28 +1,27 @@
-   Compiling json-autotune v0.1.0 (/root/.openclaw/workspace/json-autotune-rs)
 warning: function `is_structural` is never used
-   --> src/simd.rs:145:8
+   --> src/simd.rs:150:8
     |
-145 | pub fn is_structural(b: u8) -> bool {
+150 | pub fn is_structural(b: u8) -> bool {
     |        ^^^^^^^^^^^^^
     |
     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
 
 warning: function `find_structural_simd` is never used
-   --> src/simd.rs:152:15
+   --> src/simd.rs:157:15
     |
-152 | pub unsafe fn find_structural_simd(data: &[u8]) -> Option<usize> {
+157 | pub unsafe fn find_structural_simd(data: &[u8]) -> Option<usize> {
     |               ^^^^^^^^^^^^^^^^^^^^
 
 warning: function `find_structural` is never used
-   --> src/simd.rs:192:8
+   --> src/simd.rs:197:8
     |
-192 | pub fn find_structural(data: &[u8]) -> Option<usize> {
+197 | pub fn find_structural(data: &[u8]) -> Option<usize> {
     |        ^^^^^^^^^^^^^^^
 
 warning: function `find_structural_scalar` is never used
-   --> src/simd.rs:199:8
+   --> src/simd.rs:204:8
     |
-199 | pub fn find_structural_scalar(data: &[u8]) -> Option<usize> {
+204 | pub fn find_structural_scalar(data: &[u8]) -> Option<usize> {
     |        ^^^^^^^^^^^^^^^^^^^^^^
 
 warning: function `parse_f64` is never used
@@ -32,8 +31,9 @@ warning: function `parse_f64` is never used
     |        ^^^^^^^^^
 
 warning: `json-autotune` (lib) generated 5 warnings
+   Compiling json-autotune v0.1.0 (/root/.openclaw/workspace/json-autotune-rs)
 warning: `json-autotune` (lib test) generated 5 warnings (5 duplicates)
-    Finished `bench` profile [optimized] target(s) in 26.44s
+    Finished `bench` profile [optimized] target(s) in 25.71s
      Running unittests src/lib.rs (target/release/deps/json_autotune-36e433a22932adf4)
 
 running 8 tests
@@ -52,72 +52,72 @@ test result: ok. 0 passed; 0 failed; 8 ignored; 0 measured; 0 filtered out; fini
 Gnuplot not found, using plotters backend
 Benchmarking json-autotune/small
 Benchmarking json-autotune/small: Warming up for 3.0000 s
-Benchmarking json-autotune/small: Collecting 100 samples in estimated 5.0012 s (15M iterations)
+Benchmarking json-autotune/small: Collecting 100 samples in estimated 5.0015 s (15M iterations)
 Benchmarking json-autotune/small: Analyzing
-json-autotune/small     time:   [325.12 ns 325.48 ns 325.99 ns]
-                        change: [+0.5785% +0.7898% +0.9671%] (p = 0.00 < 0.05)
-                        Change within noise threshold.
-Found 8 outliers among 100 measurements (8.00%)
-  1 (1.00%) low severe
-  5 (5.00%) high mild
-  2 (2.00%) high severe
+json-autotune/small     time:   [323.75 ns 324.73 ns 325.90 ns]
+                        change: [-3.4093% -2.6659% -2.1020%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 12 outliers among 100 measurements (12.00%)
+  6 (6.00%) high mild
+  6 (6.00%) high severe
 
 Benchmarking serde_json/small
 Benchmarking serde_json/small: Warming up for 3.0000 s
-Benchmarking serde_json/small: Collecting 100 samples in estimated 5.0010 s (17M iterations)
+Benchmarking serde_json/small: Collecting 100 samples in estimated 5.0012 s (16M iterations)
 Benchmarking serde_json/small: Analyzing
-serde_json/small        time:   [303.92 ns 305.31 ns 306.89 ns]
-                        change: [+0.7532% +1.1956% +1.7050%] (p = 0.00 < 0.05)
+serde_json/small        time:   [295.23 ns 295.38 ns 295.54 ns]
+                        change: [-0.9543% -0.8691% -0.7603%] (p = 0.00 < 0.05)
                         Change within noise threshold.
-Found 1 outliers among 100 measurements (1.00%)
-  1 (1.00%) high mild
+Found 7 outliers among 100 measurements (7.00%)
+  5 (5.00%) high mild
+  2 (2.00%) high severe
 
 Benchmarking json-autotune/medium
 Benchmarking json-autotune/medium: Warming up for 3.0000 s
-Benchmarking json-autotune/medium: Collecting 100 samples in estimated 5.0497 s (126k iterations)
+Benchmarking json-autotune/medium: Collecting 100 samples in estimated 5.0614 s (126k iterations)
 Benchmarking json-autotune/medium: Analyzing
-json-autotune/medium    time:   [39.769 µs 39.835 µs 39.917 µs]
-                        change: [+0.1187% +0.4912% +0.9373%] (p = 0.01 < 0.05)
-                        Change within noise threshold.
-Found 9 outliers among 100 measurements (9.00%)
-  4 (4.00%) high mild
-  5 (5.00%) high severe
+json-autotune/medium    time:   [39.703 µs 39.808 µs 39.934 µs]
+                        change: [-2.1311% -1.5596% -1.0447%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 11 outliers among 100 measurements (11.00%)
+  7 (7.00%) high mild
+  4 (4.00%) high severe
 
 Benchmarking serde_json/medium
 Benchmarking serde_json/medium: Warming up for 3.0000 s
-Benchmarking serde_json/medium: Collecting 100 samples in estimated 5.0530 s (136k iterations)
+Benchmarking serde_json/medium: Collecting 100 samples in estimated 5.1724 s (136k iterations)
 Benchmarking serde_json/medium: Analyzing
-serde_json/medium       time:   [36.937 µs 37.096 µs 37.297 µs]
-                        change: [-3.2350% -2.4176% -1.6955%] (p = 0.00 < 0.05)
-                        Performance has improved.
-Found 10 outliers among 100 measurements (10.00%)
+serde_json/medium       time:   [37.158 µs 37.309 µs 37.517 µs]
+                        change: [+0.9722% +2.0720% +3.5006%] (p = 0.00 < 0.05)
+                        Change within noise threshold.
+Found 15 outliers among 100 measurements (15.00%)
   2 (2.00%) high mild
-  8 (8.00%) high severe
+  13 (13.00%) high severe
 
 Benchmarking large/json-autotune
 Benchmarking large/json-autotune: Warming up for 3.0000 s
-Benchmarking large/json-autotune: Collecting 100 samples in estimated 7.4688 s (15k iterations)
+Benchmarking large/json-autotune: Collecting 100 samples in estimated 7.3751 s (15k iterations)
 Benchmarking large/json-autotune: Analyzing
-large/json-autotune     time:   [487.67 µs 489.81 µs 492.25 µs]
-                        thrpt:  [50.180 MiB/s 50.430 MiB/s 50.652 MiB/s]
+large/json-autotune     time:   [489.24 µs 491.06 µs 493.07 µs]
+                        thrpt:  [50.096 MiB/s 50.302 MiB/s 50.489 MiB/s]
                  change:
-                        time:   [-0.2327% +0.3912% +0.9139%] (p = 0.21 > 0.05)
-                        thrpt:  [-0.9056% -0.3897% +0.2333%]
+                        time:   [-1.3493% -0.5356% +0.2257%] (p = 0.19 > 0.05)
+                        thrpt:  [-0.2252% +0.5385% +1.3677%]
                         No change in performance detected.
-Found 16 outliers among 100 measurements (16.00%)
-  6 (6.00%) high mild
-  10 (10.00%) high severe
+Found 9 outliers among 100 measurements (9.00%)
+  3 (3.00%) high mild
+  6 (6.00%) high severe
 Benchmarking large/serde_json
 Benchmarking large/serde_json: Warming up for 3.0000 s
-Benchmarking large/serde_json: Collecting 100 samples in estimated 7.0366 s (15k iterations)
+Benchmarking large/serde_json: Collecting 100 samples in estimated 7.0941 s (15k iterations)
 Benchmarking large/serde_json: Analyzing
-large/serde_json        time:   [459.08 µs 459.69 µs 460.66 µs]
-                        thrpt:  [53.622 MiB/s 53.734 MiB/s 53.805 MiB/s]
+large/serde_json        time:   [464.63 µs 466.14 µs 468.11 µs]
+                        thrpt:  [52.768 MiB/s 52.991 MiB/s 53.163 MiB/s]
                  change:
-                        time:   [-3.5184% -2.7617% -2.1096%] (p = 0.00 < 0.05)
-                        thrpt:  [+2.1550% +2.8401% +3.6467%]
-                        Performance has improved.
+                        time:   [-0.3395% +0.4441% +1.3995%] (p = 0.35 > 0.05)
+                        thrpt:  [-1.3802% -0.4421% +0.3407%]
+                        No change in performance detected.
 Found 7 outliers among 100 measurements (7.00%)
-  3 (3.00%) high mild
-  4 (4.00%) high severe
+  2 (2.00%) high mild
+  5 (5.00%) high severe
 

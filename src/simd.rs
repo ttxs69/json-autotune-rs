@@ -30,13 +30,12 @@ pub unsafe fn skip_whitespace_simd(data: &[u8]) -> usize {
         let eq_newline = _mm_cmpeq_epi8(chunk, newlines);
         let eq_cr = _mm_cmpeq_epi8(chunk, crs);
         let ws = _mm_or_si128(_mm_or_si128(eq_space, eq_tab), _mm_or_si128(eq_newline, eq_cr));
-        let mask = _mm_movemask_epi8(ws) as u16;
+        let mask = _mm_movemask_epi8(ws) as u32;
 
-        let inverted = !mask;
-        if inverted == 0 {
+        if mask == 0xffff {
             offset += 16;
         } else {
-            return offset + inverted.trailing_zeros() as usize;
+            return offset + (!mask).trailing_zeros() as usize;
         }
     }
     offset + skip_whitespace_scalar(&data[offset..])
@@ -48,7 +47,13 @@ pub fn skip_whitespace_simd(data: &[u8]) -> usize {
 }
 
 pub fn skip_whitespace_scalar(data: &[u8]) -> usize {
-    data.iter().position(|&b| !matches!(b, b' ' | b'\t' | b'\n' | b'\r')).unwrap_or(data.len())
+    // Simple byte comparisons - faster than matches! macro
+    for (i, &b) in data.iter().enumerate() {
+        if b != b' ' && b != b'\t' && b != b'\n' && b != b'\r' {
+            return i;
+        }
+    }
+    data.len()
 }
 
 pub fn skip_whitespace(data: &[u8]) -> usize {
