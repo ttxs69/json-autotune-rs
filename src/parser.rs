@@ -35,13 +35,11 @@ fn estimate_sizes(data: &[u8]) -> (usize, usize) {
     let mut commas = 0usize;
     let mut containers = 0usize;
     
-    // Simple scan - compiler will vectorize this
-    for &b in data.iter().step_by(8) {
-        match b {
-            b'[' | b'{' => containers += 1,
-            b',' => commas += 1,
-            _ => {}
-        }
+    // Sample first byte of each 8-byte chunk
+    for chunk in data.chunks(8) {
+        let b = chunk[0];
+        if b == b'[' || b == b'{' { containers += 1; }
+        else if b == b',' { commas += 1; }
     }
     
     let avg = if containers > 0 { (commas / containers + 1).min(64) } else { 32 };
