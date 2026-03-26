@@ -250,7 +250,8 @@ impl<'a> Parser<'a> {
             return Ok(Value::Array(Vec::new()));
         }
 
-        let mut arr = Vec::with_capacity(self.arr_cap);
+        // Start with small capacity, grow as needed
+        let mut arr = Vec::with_capacity(8);
 
         loop {
             arr.push(self.parse_value_inner()?);
