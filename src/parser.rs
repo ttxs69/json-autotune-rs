@@ -47,7 +47,6 @@ impl<'a> Parser<'a> {
         let b = unsafe { *self.input.get_unchecked(self.pos) };
         
         // Fast dispatch - most common first
-        // Combine digit and minus into single number path
         match b {
             b'"' => self.parse_string(),
             b'{' => self.parse_object(),

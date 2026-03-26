@@ -159,7 +159,7 @@ pub fn find_string_end_scalar(data: &[u8]) -> Option<(usize, bool)> {
 #[inline]
 pub fn find_string_end(data: &[u8]) -> Option<(usize, bool)> {
     #[cfg(target_arch = "x86_64")]
-    { if is_x86_feature_detected!("sse2") { unsafe { find_string_end_simd(data) } } else { find_string_end_scalar(data) } }
+    { unsafe { find_string_end_simd(data) } }
     #[cfg(not(target_arch = "x86_64"))]
     { find_string_end_scalar(data) }
 }
