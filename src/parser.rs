@@ -317,7 +317,11 @@ impl<'a> Parser<'a> {
             
             let b = unsafe { *self.input.get_unchecked(self.pos) };
             if b == b',' { 
-                self.pos += 1; 
+                self.pos += 1;
+                // Skip whitespace after comma
+                let remaining = &self.input[self.pos..];
+                let skip = simd::skip_whitespace(remaining);
+                self.pos += skip;
             } else if b == b'}' { 
                 self.pos += 1; 
                 break;
