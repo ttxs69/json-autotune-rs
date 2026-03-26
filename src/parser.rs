@@ -28,21 +28,21 @@ pub fn parse(input: &str) -> Result<Value, Error> {
 #[inline]
 fn estimate_sizes(data: &[u8]) -> (usize, usize) {
     // Skip estimation for small files - use defaults
-    if data.len() < 8192 {
-        return (32, 32);
+    if data.len() < 16384 {
+        return (16, 16);
     }
     
     let mut commas = 0usize;
     let mut containers = 0usize;
     
-    // Sample first byte of each 8-byte chunk
-    for chunk in data.chunks(8) {
+    // Sample first byte of each 16-byte chunk (faster)
+    for chunk in data.chunks(16) {
         let b = chunk[0];
         if b == b'[' || b == b'{' { containers += 1; }
         else if b == b',' { commas += 1; }
     }
     
-    let avg = if containers > 0 { (commas / containers + 1).min(64) } else { 32 };
+    let avg = if containers > 0 { (commas / containers + 1).min(32) } else { 16 };
     (avg, avg)
 }
 
