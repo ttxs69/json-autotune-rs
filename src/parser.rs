@@ -245,10 +245,8 @@ impl<'a> Parser<'a> {
     fn parse_array(&mut self) -> Result<Value, Error> {
         self.pos += 1;
         
-        // Fast path: check for empty array without calling skip_ws
-        let remaining = &self.input[self.pos..];
-        let skip = simd::skip_whitespace(remaining);
-        self.pos += skip;
+        // Inline skip_ws
+        self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
         
         if self.pos < self.input.len() && unsafe { *self.input.get_unchecked(self.pos) } == b']' {
             self.pos += 1;
@@ -260,18 +258,14 @@ impl<'a> Parser<'a> {
         loop {
             arr.push(self.parse_value_inner()?);
             
-            let remaining = &self.input[self.pos..];
-            let skip = simd::skip_whitespace(remaining);
-            self.pos += skip;
+            // Inline skip_ws after value
+            self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
             
-            // Use unchecked access after skip_ws guarantees we have data
             let b = unsafe { *self.input.get_unchecked(self.pos) };
             if b == b',' { 
                 self.pos += 1;
-                // Skip whitespace after comma
-                let remaining = &self.input[self.pos..];
-                let skip = simd::skip_whitespace(remaining);
-                self.pos += skip;
+                // Inline skip_ws after comma
+                self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
             } else if b == b']' { 
                 self.pos += 1; 
                 break;
