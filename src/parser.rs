@@ -287,9 +287,8 @@ impl<'a> Parser<'a> {
     fn parse_object(&mut self) -> Result<Value, Error> {
         self.pos += 1;
         
-        let remaining = &self.input[self.pos..];
-        let skip = simd::skip_whitespace(remaining);
-        self.pos += skip;
+        // Inline skip_ws
+        self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
         
         if self.pos < self.input.len() && unsafe { *self.input.get_unchecked(self.pos) } == b'}' {
             self.pos += 1;
@@ -309,33 +308,27 @@ impl<'a> Parser<'a> {
                 _ => unreachable!(),
             };
             
-            let remaining = &self.input[self.pos..];
-            let skip = simd::skip_whitespace(remaining);
-            self.pos += skip;
+            // Inline skip_ws
+            self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
             
             if unsafe { *self.input.get_unchecked(self.pos) } != b':' {
                 return Err(Error::new("Expected ':'", self.pos));
             }
             self.pos += 1;
             
-            // Skip whitespace before value, then use parse_value_inner (avoids double skip)
-            let remaining = &self.input[self.pos..];
-            let skip_ws = simd::skip_whitespace(remaining);
-            self.pos += skip_ws;
+            // Inline skip_ws before value
+            self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
             
             obj.insert(key, self.parse_value_inner()?);
             
-            let remaining = &self.input[self.pos..];
-            let skip = simd::skip_whitespace(remaining);
-            self.pos += skip;
+            // Inline skip_ws after value
+            self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
             
             let b = unsafe { *self.input.get_unchecked(self.pos) };
             if b == b',' { 
                 self.pos += 1;
-                // Skip whitespace after comma
-                let remaining = &self.input[self.pos..];
-                let skip = simd::skip_whitespace(remaining);
-                self.pos += skip;
+                // Inline skip_ws after comma
+                self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
             } else if b == b'}' { 
                 self.pos += 1; 
                 break;
