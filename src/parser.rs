@@ -65,9 +65,8 @@ impl<'a> Parser<'a> {
 
     #[inline(always)]
     fn parse_value(&mut self) -> Result<Value, Error> {
-        // Inline skip_ws directly
-        let skip = simd::skip_whitespace(&self.input[self.pos..]);
-        self.pos += skip;
+        // Inline skip_ws with get_unchecked
+        self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
         self.parse_value_inner()
     }
 
