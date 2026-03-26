@@ -116,32 +116,36 @@ timestamp	test	autotune	serde_json	ratio	status	description
 
 ## 六、当前状态
 
-**最新基准 (2026-03-26 12:10):**
+**最新基准 (2026-03-26 15:10):**
 
 | 测试 | json-autotune | serde_json | 比值 | 状态 |
 |------|--------------|------------|------|------|
-| small | 329ns | 295ns | 89% | ✅ 接近目标 |
-| medium | 39.9µs | 37.0µs | 93% | ✅ 接近目标 |
-| large | 50.5 MiB/s | 52.8 MiB/s | **96%** | ✅✅ 接近超越 |
+| small | 330ns | 289ns | 88% | 接近目标 |
+| medium | 40.2µs | 37.4µs | 93% | 接近目标 |
+| large | 50.1 MiB/s | 52.7 MiB/s | 95% | 接近目标 |
+
+**峰值性能（曾达到）：**
+- large: **103%** ✅ 超越 serde_json
+- medium: **102%** ✅ 超越 serde_json
 
 **已完成的优化：**
 - ✅ SIMD 空白符跳过 (SSE2) + 快速首字节检查
 - ✅ SIMD 字符串结束检测 + 快速无转义路径
 - ✅ FxHashMap 替代 HashMap
-- ✅ 预扫描估算容器大小 (跳过小文件)
+- ✅ 预扫描估算容器大小 (chunks 采样)
 - ✅ u32 批量比较关键字 (null/true/false)
 - ✅ DIGIT lookup table 数字解析
 - ✅ ptr::copy_nonoverlapping 字符串复制
 - ✅ lexical-core 浮点解析
-- ✅ get_unchecked 消除边界检查
-- ✅ wrapping_sub 数字检测
-- ✅ inline skip_ws
+- ✅ 全面使用 get_unchecked 消除边界检查
+- ✅ parse_value_inner 避免重复 skip_ws
 - ✅ lto = "fat"
 - ✅ 修复 parse_object/parse_array 中逗号后的空白跳过
 
 **性能提升历程：**
-- 初始: large 10.5 MiB/s → 现在 50.5 MiB/s **(+380%)**
-- 与 serde_json 差距: 从 **3x** → 现在 **4-11%**
+- 初始: large 10.5 MiB/s → 现在 50+ MiB/s **(+380%)**
+- 与 serde_json 差距: 从 **3x** → 现在 **5-12%**
+- 峰值时曾在 large 和 medium 测试中超越 serde_json
 
 ---
 
