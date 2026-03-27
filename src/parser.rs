@@ -4,6 +4,8 @@ use crate::{Error, Value, simd, number};
 use crate::value::{JsonString, Object};
 use foldhash::fast::FixedState;
 use hashbrown::HashMap;
+use smartstring::SmartString;
+use std::mem::MaybeUninit;
 
 // Lookup table for keyword matching (faster than memcmp for short words)
 const KEYWORD_NULL: u32 = 0x6c6c756e; // "null" as u32 (little-endian)
@@ -254,29 +256,23 @@ impl<'a> Parser<'a> {
         
         if self.pos < self.input.len() && unsafe { *self.input.get_unchecked(self.pos) } == b'}' {
             self.pos += 1;
-            // Empty object: use Tiny with default values
-            let empty_key: JsonString = "".into();
             return Ok(Value::Object(Object::Tiny(Box::new([
-                (empty_key.clone(), Value::Null),
-                (empty_key.clone(), Value::Null),
-                (empty_key, Value::Null),
+                (SmartString::new(), Value::Null),
+                (SmartString::new(), Value::Null),
+                (SmartString::new(), Value::Null),
             ]))));
         }
 
-        // Collect fields in a small inline array first
-        let mut tiny: [(JsonString, Value); 3] = [
-            ("".into(), Value::Null),
-            ("".into(), Value::Null),
-            ("".into(), Value::Null),
-        ];
-        let mut tiny_count = 0;
+        // Use MaybeUninit to avoid initialization overhead
+        let mut tiny: [std::mem::MaybeUninit<(JsonString, Value)>; 3] = unsafe { std::mem::MaybeUninit::uninit().assume_init() };
+        let mut tiny_count = 0usize;
         let mut fields: Option<Vec<(JsonString, Value)>> = None;
 
         loop {
             // Key
             let key = if let Value::String(s) = self.parse_string()? { s } else { unreachable!() };
             
-            // Colon - skip whitespace before (rare in compact JSON)
+            // Colon
             let colon_pos = self.pos;
             let c = unsafe { *self.input.get_unchecked(colon_pos) };
             if c == b' ' || c == b'\t' || c == b'\n' || c == b'\r' {
@@ -287,7 +283,7 @@ impl<'a> Parser<'a> {
             }
             self.pos += 1;
             
-            // Value - skip whitespace after colon (rare)
+            // Value
             let vpos = self.pos;
             let vc = unsafe { *self.input.get_unchecked(vpos) };
             if vc == b' ' || vc == b'\t' || vc == b'\n' || vc == b'\r' {
@@ -296,21 +292,22 @@ impl<'a> Parser<'a> {
             
             let value = self.parse_value_inner()?;
             
-            // Store in tiny array or spill to Vec
+            // Store
             if fields.is_none() && tiny_count < 3 {
-                tiny[tiny_count] = (key, value);
+                unsafe { tiny[tiny_count].as_mut_ptr().write((key, value)) };
                 tiny_count += 1;
             } else {
                 if fields.is_none() {
                     fields = Some(Vec::with_capacity(8));
                     for i in 0..tiny_count {
-                        fields.as_mut().unwrap().push(tiny[i].clone());
+                        let kv = unsafe { tiny[i].assume_init_read() };
+                        fields.as_mut().unwrap().push(kv);
                     }
                 }
                 fields.as_mut().unwrap().push((key, value));
             }
             
-            // Next - skip whitespace before comma/brace
+            // Next
             let npos = self.pos;
             let nc = unsafe { *self.input.get_unchecked(npos) };
             if nc == b' ' || nc == b'\t' || nc == b'\n' || nc == b'\r' {
@@ -328,7 +325,7 @@ impl<'a> Parser<'a> {
             }
         }
         
-        // Build result based on size
+        // Build result
         let obj = match (fields, tiny_count) {
             (Some(f), _) if f.len() <= 8 => Object::Small(f),
             (Some(f), _) => {
@@ -338,10 +335,27 @@ impl<'a> Parser<'a> {
                 }
                 Object::Large(map)
             }
-            (None, _) => {
-                // Tiny: already filled
-                Object::Tiny(Box::new(tiny))
+            (None, 0) => Object::Tiny(Box::new([
+                (SmartString::new(), Value::Null),
+                (SmartString::new(), Value::Null),
+                (SmartString::new(), Value::Null),
+            ])),
+            (None, 1) => {
+                let kv0 = unsafe { tiny[0].assume_init_read() };
+                Object::Tiny(Box::new([kv0, (SmartString::new(), Value::Null), (SmartString::new(), Value::Null)]))
             }
+            (None, 2) => {
+                let kv0 = unsafe { tiny[0].assume_init_read() };
+                let kv1 = unsafe { tiny[1].assume_init_read() };
+                Object::Tiny(Box::new([kv0, kv1, (SmartString::new(), Value::Null)]))
+            }
+            (None, 3) => {
+                let kv0 = unsafe { tiny[0].assume_init_read() };
+                let kv1 = unsafe { tiny[1].assume_init_read() };
+                let kv2 = unsafe { tiny[2].assume_init_read() };
+                Object::Tiny(Box::new([kv0, kv1, kv2]))
+            }
+            _ => unreachable!(),
         };
         
         Ok(Value::Object(obj))

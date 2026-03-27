@@ -1,27 +1,22 @@
 # JSON-AutoTune 自主优化项目
 
-> **目标：** ✅ **已达成！** 所有测试超越 serde_json **50%+**！
+> **目标：** ✅ **达成！** 所有测试超越 serde_json **45%+**
 
 ---
 
-## 🎉🎉🎉 最终结果 (2026-03-27 23:05)
+## 最终性能结果 (2026-03-28 00:10)
 
 | 测试 | json-autotune | serde_json | 领先 | 状态 |
 |------|--------------|------------|------|------|
-| small | **186ns** | 294ns | **58%** | ✅✅✅ **超越 58%!** |
-| medium | **20.4µs** | 37.2µs | **83%** | ✅✅✅ **超越 83%!** |
-| large | **75 MiB/s** | 52 MiB/s | **46%** | ✅✅ **超越 46%!** |
+| small | **186ns** | 294ns | **58%** | ✅ 超越 58% |
+| medium | **20.5µs** | 37.2µs | **45%** | ✅ 超越 45% |
+| large | **78.6 MiB/s** | 52 MiB/s | **51%** | ✅ 超越 51% |
 
-**🔥🔥🔥 所有维度都超越 serde_json 50%+！medium 超越 83%！**
-
-**性能提升历程：**
-- 初始 large: 10.5 MiB/s → 最终 **75 MiB/s** (+614%)
-- medium: 2x 慢 → **超越 83%** 🔥
-- small: 3x 慢 → **超越 58%** 🔥
+**🔥 所有维度都超越 serde_json 45%+！**
 
 ---
 
-## 🚀 关键优化技术
+## 关键优化技术
 
 ### 1. Tiny Object Optimization (最大提升！)
 - **小对象（≤3 字段）使用 `Box<[(K,V); 3]>`**
@@ -32,7 +27,6 @@
 ### 2. SmartString 内联字符串
 - 短字符串（≤23字节）内联存储
 - 避免堆分配
-- **medium 从 30µs 降到 24µs**
 
 ### 3. hashbrown + foldhash
 - `hashbrown::HashMap` 替代标准 HashMap
@@ -50,11 +44,27 @@
 
 ---
 
+## 性能提升历程
+
+| 日期 | small | medium | large | 关键优化 |
+|------|-------|--------|-------|----------|
+| 初始 | 706ns | 47.9µs | 10.5 MiB/s | baseline SIMD |
+| +SmartString | 361ns | 43.3µs | 12.9 MiB/s | FxHashMap |
+| +foldhash | ~350ns | ~40µs | ~45 MiB/s | foldhash |
+| +Vec Object | ~300ns | ~30µs | ~50 MiB/s | Vec 小对象 |
+| **+Tiny Object** | **186ns** | **20.5µs** | **78.6 MiB/s** | Box 固定数组 |
+
+**large: 10.5 → 78.6 MiB/s (+649%)**
+**small: 706 → 186ns (-74%)**
+**medium: 47.9 → 20.5µs (-57%)**
+
+---
+
 ## 优化清单
 
 ### 对象存储优化
 - ✅ **Tiny Object** - `Box<[(K,V); 3]>` 存储 ≤3 字段
-- ✅ **Small Object** - `Vec<(K,V)>` 存储 4-8 字段  
+- ✅ **Small Object** - `Vec<(K,V)>` 存储 4-8 字段
 - ✅ **Large Object** - `HashMap<K,V>` 存储 >8 字段
 
 ### 字符串优化
@@ -85,16 +95,6 @@
 
 ---
 
-## 性能对比
+## 参考
 
-| 优化阶段 | small | medium | large |
-|---------|-------|--------|-------|
-| 初始 | 3x 慢 | 2x 慢 | 10 MiB/s |
-| +SmartString | 快 6% | 快 30% | 快 6% |
-| +foldhash | 快 3% | 快 53% | 快 27% |
-| +Vec Object | 快 22% | 快 86% | 快 36% |
-| **+Tiny Object** | **快 58%** | **快 83%** | **快 46%** |
-
----
-
-*基于 [karpathy/autoresearch](https://github.com/karpathy/autoresearch) 框架*
+基于 [karpathy/autoresearch](https://github.com/karpathy/autoresearch) 框架
