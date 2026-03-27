@@ -1,4 +1,4 @@
-use rustc_hash::FxHashMap;
+use hashbrown::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
@@ -7,7 +7,7 @@ pub enum Value {
     Number(f64),
     String(Box<str>),  // More compact than String (no capacity field)
     Array(Vec<Value>),
-    Object(FxHashMap<Box<str>, Value>),
+    Object(HashMap<Box<str>, Value>),
 }
 
 impl Value {
@@ -38,7 +38,7 @@ impl Value {
         match self { Value::Array(a) => Some(a), _ => None }
     }
 
-    pub fn as_object(&self) -> Option<&FxHashMap<Box<str>, Value>> {
+    pub fn as_object(&self) -> Option<&HashMap<Box<str>, Value>> {
         match self { Value::Object(o) => Some(o), _ => None }
     }
 }
