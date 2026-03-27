@@ -215,8 +215,8 @@ impl<'a> Parser<'a> {
             return Ok(Value::Array(Vec::new()));
         }
 
-        // Start with capacity 4 - typical arrays in JSON are small
-        let mut arr = Vec::with_capacity(4);
+        // Start with capacity 8 - balance between small and large arrays
+        let mut arr = Vec::with_capacity(8);
 
         loop {
             arr.push(self.parse_value_inner()?);
