@@ -260,11 +260,8 @@ impl<'a> Parser<'a> {
         let mut obj = JsonMap::with_capacity_and_hasher(3, FixedState::default());
 
         loop {
-            // Key
-            let key = match self.parse_string()? {
-                Value::String(s) => s,
-                _ => unreachable!(),
-            };
+            // Key - directly extract string from parse_string result
+            let key = if let Value::String(s) = self.parse_string()? { s } else { unreachable!() };
             
             // Colon - skip whitespace before (rare in compact JSON)
             let colon_pos = self.pos;
