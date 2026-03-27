@@ -3,11 +3,15 @@ use smartstring::SmartString;
 use foldhash::fast::FixedState;
 
 // Use SmartString for inline small strings (<= 23 bytes on 64-bit)
-// This avoids heap allocation for short strings
 pub type JsonString = SmartString<smartstring::LazyCompact>;
 
-// Use foldhash for faster hashing
-pub type JsonMap<V> = HashMap<JsonString, V, FixedState>;
+// Small object optimization: use Vec for objects with <= 4 fields
+// This is faster than HashMap for small objects due to no hashing overhead
+#[derive(Debug, Clone, PartialEq)]
+pub enum Object {
+    Small(Vec<(JsonString, Value)>),  // <= 4 fields
+    Large(HashMap<JsonString, Value, FixedState>),  // > 4 fields
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
@@ -16,7 +20,7 @@ pub enum Value {
     Number(f64),
     String(JsonString),
     Array(Vec<Value>),
-    Object(JsonMap<Value>),
+    Object(Object),
 }
 
 impl Value {
@@ -47,8 +51,18 @@ impl Value {
         match self { Value::Array(a) => Some(a), _ => None }
     }
 
-    pub fn as_object(&self) -> Option<&JsonMap<Value>> {
-        match self { Value::Object(o) => Some(o), _ => None }
+    pub fn as_object_small(&self) -> Option<&Vec<(JsonString, Value)>> {
+        match self { 
+            Value::Object(Object::Small(v)) => Some(v), 
+            _ => None 
+        }
+    }
+    
+    pub fn as_object_large(&self) -> Option<&HashMap<JsonString, Value, FixedState>> {
+        match self { 
+            Value::Object(Object::Large(m)) => Some(m), 
+            _ => None 
+        }
     }
 }
 
@@ -56,7 +70,13 @@ impl std::ops::Index<&str> for Value {
     type Output = Value;
     fn index(&self, key: &str) -> &Self::Output {
         static NULL: Value = Value::Null;
-        match self { Value::Object(o) => o.get(key).unwrap_or(&NULL), _ => &NULL }
+        match self { 
+            Value::Object(Object::Small(v)) => {
+                v.iter().find(|(k, _)| k.as_str() == key).map(|(_, v)| v).unwrap_or(&NULL)
+            }
+            Value::Object(Object::Large(m)) => m.get(key).unwrap_or(&NULL),
+            _ => &NULL,
+        }
     }
 }
 

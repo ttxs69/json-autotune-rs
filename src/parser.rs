@@ -1,8 +1,9 @@
 //! JSON parser - highly optimized
 
 use crate::{Error, Value, simd, number};
-use crate::value::{JsonString, JsonMap};
+use crate::value::{JsonString, Object};
 use foldhash::fast::FixedState;
+use hashbrown::HashMap;
 
 // Lookup table for keyword matching (faster than memcmp for short words)
 const KEYWORD_NULL: u32 = 0x6c6c756e; // "null" as u32 (little-endian)
@@ -253,14 +254,14 @@ impl<'a> Parser<'a> {
         
         if self.pos < self.input.len() && unsafe { *self.input.get_unchecked(self.pos) } == b'}' {
             self.pos += 1;
-            return Ok(Value::Object(JsonMap::with_hasher(FixedState::default())));
+            return Ok(Value::Object(Object::Small(Vec::new())));
         }
 
-        // Pre-allocate with capacity 3 - most small objects have 2-3 fields
-        let mut obj = JsonMap::with_capacity_and_hasher(3, FixedState::default());
+        // Collect fields in a Vec first (avoids HashMap overhead for small objects)
+        let mut fields: Vec<(JsonString, Value)> = Vec::with_capacity(4);
 
         loop {
-            // Key - directly extract string from parse_string result
+            // Key
             let key = if let Value::String(s) = self.parse_string()? { s } else { unreachable!() };
             
             // Colon - skip whitespace before (rare in compact JSON)
@@ -281,7 +282,7 @@ impl<'a> Parser<'a> {
                 self.pos += 1 + simd::skip_whitespace(unsafe { self.input.get_unchecked(vpos + 1..) });
             }
             
-            obj.insert(key, self.parse_value_inner()?);
+            fields.push((key, self.parse_value_inner()?));
             
             // Next - skip whitespace before comma/brace
             let npos = self.pos;
@@ -300,6 +301,17 @@ impl<'a> Parser<'a> {
                 return Err(Error::new("Expected ',' or '}'", self.pos));
             }
         }
+        
+        // Use Vec for small objects (<=4 fields), HashMap for larger
+        let obj = if fields.len() <= 4 {
+            Object::Small(fields)
+        } else {
+            let mut map = HashMap::with_capacity_and_hasher(fields.len(), FixedState::default());
+            for (k, v) in fields {
+                map.insert(k, v);
+            }
+            Object::Large(map)
+        };
         
         Ok(Value::Object(obj))
     }
