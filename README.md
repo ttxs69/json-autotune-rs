@@ -40,7 +40,7 @@
 ```
 json-autotune-rs/
 ├── README.md         # 本文件
-├── AUTOTUNE.md       # AI 优化过程记录
+├── AUTOTUNE.md       # AI 优化任务要求
 ├── src/
 │   ├── lib.rs        # 库入口
 │   ├── parser.rs     # 解析器核心
@@ -52,7 +52,6 @@ json-autotune-rs/
 │   └── benchmark.rs  # 性能测试
 ├── examples/
 │   └── parse.rs      # 使用示例
-├── results.tsv       # 实验历史
 └── Cargo.toml
 ```
 

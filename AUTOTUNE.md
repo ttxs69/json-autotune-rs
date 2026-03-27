@@ -1,100 +1,135 @@
-# JSON-AutoTune 自主优化项目
+# JSON-AutoTune 自主优化任务要求
 
-> **目标：** ✅ **达成！** 所有测试超越 serde_json **45%+**
-
----
-
-## 最终性能结果 (2026-03-28 00:10)
-
-| 测试 | json-autotune | serde_json | 领先 | 状态 |
-|------|--------------|------------|------|------|
-| small | **186ns** | 294ns | **58%** | ✅ 超越 58% |
-| medium | **20.5µs** | 37.2µs | **45%** | ✅ 超越 45% |
-| large | **78.6 MiB/s** | 52 MiB/s | **51%** | ✅ 超越 51% |
-
-**🔥 所有维度都超越 serde_json 45%+！**
+> 本文件定义 AI Agent 的优化目标和要求，参考 [karpathy/autoresearch](https://github.com/karpathy/autoresearch) 框架
 
 ---
 
-## 关键优化技术
+## 目标
 
-### 1. Tiny Object Optimization (最大提升！)
-- **小对象（≤3 字段）使用 `Box<[(K,V); 3]>`**
-- 完全避免 HashMap 开销
-- 栈上分配，零堆开销
-- **small 从 290ns 降到 186ns，提升 58%！**
-
-### 2. SmartString 内联字符串
-- 短字符串（≤23字节）内联存储
-- 避免堆分配
-
-### 3. hashbrown + foldhash
-- `hashbrown::HashMap` 替代标准 HashMap
-- `foldhash::fast::FixedState` 提供极速哈希
-
-### 4. SIMD 优化
-- SSE2 空白符跳过
-- 范围比较优化
-- SIMD 字符串结束检测
-
-### 5. 数字解析
-- 整数快速路径
-- `fast-float` 浮点解析
-- DIGIT lookup table
+**持续优化 JSON 解析器性能，目标是在所有测试场景下超越 serde_json**
 
 ---
 
-## 性能提升历程
+## 固定基准（不可修改）
 
-| 日期 | small | medium | large | 关键优化 |
-|------|-------|--------|-------|----------|
-| 初始 | 706ns | 47.9µs | 10.5 MiB/s | baseline SIMD |
-| +SmartString | 361ns | 43.3µs | 12.9 MiB/s | FxHashMap |
-| +foldhash | ~350ns | ~40µs | ~45 MiB/s | foldhash |
-| +Vec Object | ~300ns | ~30µs | ~50 MiB/s | Vec 小对象 |
-| **+Tiny Object** | **186ns** | **20.5µs** | **78.6 MiB/s** | Box 固定数组 |
+### `benches/benchmark.rs` - 评估函数
 
-**large: 10.5 → 78.6 MiB/s (+649%)**
-**small: 706 → 186ns (-74%)**
-**medium: 47.9 → 20.5µs (-57%)**
+```rust
+// 小对象测试: {"name":"Alice","age":30,"active":true}
+fn gen_small() -> String { r#"{"name":"Alice","age":30,"active":true}"#.into() }
 
----
+// 中等对象测试: 100 个用户记录
+fn gen_medium() -> String {
+    let items: Vec<String> = (0..100).map(|i| format!(r#"{{"id":{},"name":"User{}"}}"#, i, i)).collect();
+    format!(r#"{{"users":[{}]}}"#, items.join(","))
+}
 
-## 优化清单
+// 大文件测试: 1000 个记录
+fn gen_large() -> String {
+    let items: Vec<String> = (0..1000).map(|i| format!(r#"{{"id":{},"data":[1,2,3]}}"#, i)).collect();
+    format!(r#"{{"items":[{}]}}"#, items.join(","))
+}
+```
 
-### 对象存储优化
-- ✅ **Tiny Object** - `Box<[(K,V); 3]>` 存储 ≤3 字段
-- ✅ **Small Object** - `Vec<(K,V)>` 存储 4-8 字段
-- ✅ **Large Object** - `HashMap<K,V>` 存储 >8 字段
+### 评估指标
 
-### 字符串优化
-- ✅ **SmartString** - 内联 ≤23 字节
+- **small/medium**: 解析时间（越低越好）
+- **large**: 吞吐量 MiB/s（越高越好）
 
-### 哈希优化
-- ✅ hashbrown::HashMap
-- ✅ foldhash::FixedState
+### 对比基准
 
-### 解析优化
-- ✅ SIMD 空白符跳过
-- ✅ SIMD 字符串结束检测
-- ✅ fast-float
-- ✅ 整数快速路径
-- ✅ inline(always)
-- ✅ get_unchecked
-- ✅ lto = "fat"
+- `serde_json::from_str::<serde_json::Value>`
 
 ---
 
-## 关键发现
+## 可变模块（Agent 可修改）
 
-1. **Tiny Object 效果显著** - 小对象用固定数组替代 Vec/HashMap
-2. **SmartString 很强** - 内联短字符串避免分配
-3. **foldhash 很快** - 比默认哈希快很多
-4. **分层存储策略** - Tiny/Small/Large 分层优化
-5. **避免间接访问** - 栈上数据比堆快
+### `src/parser.rs` - 解析器实现
+Agent 可以修改任何部分：
+- 对象存储结构
+- 字符串存储方式
+- 数字解析逻辑
+- 内存分配策略
+
+### `src/value.rs` - JSON 值类型
+### `src/simd.rs` - SIMD 优化
+### `src/number.rs` - 数字解析
+### `Cargo.toml` - 依赖和编译参数
 
 ---
 
-## 参考
+## 优化要求
 
-基于 [karpathy/autoresearch](https://github.com/karpathy/autoresearch) 框架
+### 1. 正确性优先
+- 所有解析结果必须与 serde_json 一致
+- 错误处理必须正确
+- 不引入 panic 或 UB
+
+### 2. 性能目标
+- **small**: 目标 < 200ns（当前 186ns ✅）
+- **medium**: 目标 < 25µs（当前 20.5µs ✅）
+- **large**: 目标 > 70 MiB/s（当前 78.6 MiB/s ✅）
+
+### 3. 约束条件
+- 仅使用纯 Rust 依赖
+- 不修改 `benches/benchmark.rs`
+- 保持 API 兼容（`parse()` 函数签名不变）
+
+### 4. 代码质量
+- 遵循 Rust 最佳实践
+- 避免不必要的依赖
+- 保持代码简洁
+
+---
+
+## 实验循环
+
+```
+LOOP FOREVER:
+1. 查看当前 git 状态
+2. 修改 src/ 下的文件（尝试新优化）
+3. git commit
+4. 运行实验: cargo bench
+5. 解析结果，对比 serde_json
+6. 记录到 results.tsv
+7. 如果改进 → 保留 commit；否则 → git reset 回退
+```
+
+---
+
+## 决策规则
+
+| 结果 | 行为 |
+|------|------|
+| 性能提升 | 保留 commit，继续迭代 |
+| 性能下降 | git reset 回退 |
+| 编译失败/测试失败 | 回退，跳过 |
+
+---
+
+## 结果记录格式 (results.tsv)
+
+```
+timestamp	test	autotune	serde_json	ratio	status	description
+2026-03-28_00:10	small	186ns	294ns	0.63	keep	Tiny Object
+```
+
+---
+
+## 设计原则
+
+> **简单胜过复杂。同样的效果，更简单的代码更好。删除代码且效果相当 = 好结果。**
+
+1. **分层优化**: 小/中/大对象使用不同策略
+2. **避免堆分配**: 栈上能存的不放堆
+3. **SIMD 加速**: 批量操作使用 SIMD 指令
+4. **缓存友好**: 减少指针跳转，提高命中率
+
+---
+
+## 参考技术
+
+- [simdjson](https://github.com/simdjson/simdjson) - C++ SIMD JSON 解析器
+- [smartstring](https://github.com(optional) - 栈上内联字符串
+- [foldhash](https://github.com/) - 快速确定性哈希
+- [fast-float](https://github.com/) - 快速浮点解析
