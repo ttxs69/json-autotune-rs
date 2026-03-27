@@ -1,4 +1,4 @@
-use rustc_hash::FxHashMap;
+use ahash::AHashMap;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
@@ -7,7 +7,7 @@ pub enum Value {
     Number(f64),
     String(String),
     Array(Vec<Value>),
-    Object(FxHashMap<String, Value>),
+    Object(AHashMap<String, Value>),
 }
 
 impl Value {
@@ -38,7 +38,7 @@ impl Value {
         match self { Value::Array(a) => Some(a), _ => None }
     }
 
-    pub fn as_object(&self) -> Option<&FxHashMap<String, Value>> {
+    pub fn as_object(&self) -> Option<&AHashMap<String, Value>> {
         match self { Value::Object(o) => Some(o), _ => None }
     }
 }
