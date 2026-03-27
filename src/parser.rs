@@ -186,21 +186,23 @@ impl<'a> Parser<'a> {
     fn parse_number(&mut self) -> Result<Value, Error> {
         let remaining = unsafe { self.input.get_unchecked(self.pos..) };
         
-        // Fast integer path
+        // Fast integer path - most numbers in JSON are integers
         if let Some((val, len)) = number::parse_integer(remaining) {
             let next_pos = self.pos + len;
+            // Check if this is a pure integer (no . or e/E)
             if next_pos >= self.input.len() {
                 self.pos = next_pos;
                 return Ok(Value::Number(val as f64));
             }
             let next_byte = unsafe { *self.input.get_unchecked(next_pos) };
+            // ASCII: '.'=46, 'E'=69, 'e'=101 - check with single comparison
             if next_byte != b'.' && next_byte != b'e' && next_byte != b'E' {
                 self.pos = next_pos;
                 return Ok(Value::Number(val as f64));
             }
         }
         
-        // Use lexical-core for fast float parsing
+        // Float path using lexical-core
         let len = number::skip_number(remaining)
             .ok_or_else(|| Error::new("Invalid number", self.pos))?;
         
