@@ -1,13 +1,18 @@
 use hashbrown::HashMap;
+use smartstring::SmartString;
+
+// Use SmartString for inline small strings (<= 23 bytes on 64-bit)
+// This avoids heap allocation for short strings
+pub type JsonString = SmartString<smartstring::LazyCompact>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Null,
     Bool(bool),
     Number(f64),
-    String(Box<str>),  // More compact than String (no capacity field)
+    String(JsonString),
     Array(Vec<Value>),
-    Object(HashMap<Box<str>, Value>),
+    Object(HashMap<JsonString, Value>),
 }
 
 impl Value {
@@ -38,7 +43,7 @@ impl Value {
         match self { Value::Array(a) => Some(a), _ => None }
     }
 
-    pub fn as_object(&self) -> Option<&HashMap<Box<str>, Value>> {
+    pub fn as_object(&self) -> Option<&HashMap<JsonString, Value>> {
         match self { Value::Object(o) => Some(o), _ => None }
     }
 }

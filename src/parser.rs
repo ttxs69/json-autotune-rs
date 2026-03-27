@@ -2,6 +2,7 @@
 
 use crate::{Error, Value, simd, number};
 use hashbrown::HashMap;
+use crate::value::JsonString;
 
 // Lookup table for keyword matching (faster than memcmp for short words)
 const KEYWORD_NULL: u32 = 0x6c6c756e; // "null" as u32 (little-endian)
@@ -120,8 +121,8 @@ impl<'a> Parser<'a> {
         if !has_escapes {
             // Fast path: create String from bytes
             let raw = unsafe { remaining.get_unchecked(..end) };
-            let s = unsafe { std::str::from_utf8_unchecked(raw) };
-            return Ok(Value::String(s.into()));
+            let s: JsonString = unsafe { std::str::from_utf8_unchecked(raw) }.into();
+            return Ok(Value::String(s));
         }
         
         // Slow path: handle escapes
@@ -171,7 +172,7 @@ impl<'a> Parser<'a> {
             }
         }
         
-        Ok(Value::String(unsafe { String::from_utf8_unchecked(result) }.into_boxed_str()))
+        Ok(Value::String(unsafe { String::from_utf8_unchecked(result) }.into()))
     }
 
     #[inline(always)]
