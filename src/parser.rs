@@ -115,11 +115,11 @@ impl<'a> Parser<'a> {
         let (end, has_escapes) = simd::find_string_end(remaining)
             .ok_or_else(|| Error::new("Unterminated string", self.pos))?;
         
-        let raw = unsafe { remaining.get_unchecked(..end) };
         self.pos += end + 1;
         
         if !has_escapes {
             // Fast path: directly create String from bytes
+            let raw = unsafe { remaining.get_unchecked(..end) };
             let mut s = String::with_capacity(end);
             unsafe {
                 std::ptr::copy_nonoverlapping(
@@ -132,6 +132,8 @@ impl<'a> Parser<'a> {
             return Ok(Value::String(s));
         }
         
+        // Slow path: handle escapes
+        let raw = unsafe { remaining.get_unchecked(..end) };
         self.unescape(raw)
     }
 
