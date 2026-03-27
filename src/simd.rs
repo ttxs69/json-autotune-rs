@@ -20,7 +20,7 @@ pub unsafe fn skip_whitespace_simd(data: &[u8]) -> usize {
     // Actually simpler: use signed comparison trick
     // ws if c == 32 OR (c >= 9 AND c <= 13)
     // Optimized: create mask where bit c is set for ws chars
-    let ws_mask = _mm_setr_epi8(
+    let _ws_mask = _mm_setr_epi8(
         0, 0, 0, 0, 0, 0, 0, 0,  // 0-7: not ws
         0, 1, 1, 1, 1, 1, 0, 0   // 8-15: 9,10,11,12,13 are ws
     );
@@ -165,6 +165,7 @@ pub fn find_string_end_simd(data: &[u8]) -> Option<(usize, bool)> {
     find_string_end_scalar(data)
 }
 
+#[allow(dead_code)]
 pub fn find_string_end_scalar(data: &[u8]) -> Option<(usize, bool)> {
     let mut escaped = false;
     let mut has_escapes = false;
