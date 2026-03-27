@@ -70,33 +70,39 @@ impl<'a> Parser<'a> {
 
     #[inline(always)]
     fn parse_true(&mut self) -> Result<Value, Error> {
-        if self.pos + 4 <= self.input.len() {
-            let word = unsafe {
-                u32::from_le_bytes(*(self.input.as_ptr().add(self.pos) as *const [u8; 4]))
-            };
-            if word == KEYWORD_TRUE {
-                self.pos += 4;
-                return Ok(Value::Bool(true));
-            }
+        // Fast path: read 4 bytes as u32 and compare
+        if self.pos + 4 > self.input.len() {
+            return Err(Error::new("Expected true", self.pos));
         }
-        Err(Error::new("Expected true", self.pos))
+        let word = unsafe {
+            u32::from_le_bytes(*(self.input.as_ptr().add(self.pos) as *const [u8; 4]))
+        };
+        if word == KEYWORD_TRUE {
+            self.pos += 4;
+            Ok(Value::Bool(true))
+        } else {
+            Err(Error::new("Expected true", self.pos))
+        }
     }
 
     #[inline(always)]
     fn parse_false(&mut self) -> Result<Value, Error> {
-        if self.pos + 5 <= self.input.len() {
-            let first = unsafe { *self.input.get_unchecked(self.pos) };
-            if first == b'f' {
-                let suffix = unsafe {
-                    u32::from_le_bytes(*(self.input.as_ptr().add(self.pos + 1) as *const [u8; 4]))
-                };
-                if suffix == 0x65736c61 { // "alse" in little-endian
-                    self.pos += 5;
-                    return Ok(Value::Bool(false));
-                }
-            }
+        if self.pos + 5 > self.input.len() {
+            return Err(Error::new("Expected false", self.pos));
         }
-        Err(Error::new("Expected false", self.pos))
+        let first = unsafe { *self.input.get_unchecked(self.pos) };
+        if first != b'f' {
+            return Err(Error::new("Expected false", self.pos));
+        }
+        let suffix = unsafe {
+            u32::from_le_bytes(*(self.input.as_ptr().add(self.pos + 1) as *const [u8; 4]))
+        };
+        if suffix == 0x65736c61 { // "alse" in little-endian
+            self.pos += 5;
+            Ok(Value::Bool(false))
+        } else {
+            Err(Error::new("Expected false", self.pos))
+        }
     }
 
     #[inline(always)]
