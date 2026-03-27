@@ -13,7 +13,8 @@ pub fn parse(input: &str) -> Result<Value, Error> {
     // Minimal Parser struct for fast parsing
     let mut p = Parser { input: bytes, pos: 0 };
     let v = p.parse_value()?;
-    p.skip_ws();
+    // Inline skip_ws check for trailing data
+    p.pos += simd::skip_whitespace(unsafe { p.input.get_unchecked(p.pos..) });
     if p.pos < p.input.len() {
         return Err(Error::new("Trailing data", p.pos));
     }
@@ -26,13 +27,6 @@ struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    #[inline(always)]
-    fn skip_ws(&mut self) {
-        let data = &self.input[self.pos..];
-        let skip = simd::skip_whitespace(data);
-        self.pos += skip;
-    }
-
     #[inline(always)]
     fn parse_value(&mut self) -> Result<Value, Error> {
         // Inline skip_ws with get_unchecked
@@ -221,8 +215,8 @@ impl<'a> Parser<'a> {
             return Ok(Value::Array(Vec::new()));
         }
 
-        // Start with small capacity, grow as needed
-        let mut arr = Vec::with_capacity(8);
+        // Start with capacity 4 - typical arrays in JSON are small
+        let mut arr = Vec::with_capacity(4);
 
         loop {
             arr.push(self.parse_value_inner()?);
