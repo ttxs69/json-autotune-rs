@@ -272,7 +272,11 @@ impl<'a> Parser<'a> {
                 return Err(Error::new("Expected ':'", self.pos));
             }
             self.pos += 1;
-            self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
+            // Fast check: colon usually followed by non-whitespace in compact JSON
+            let next = unsafe { *self.input.get_unchecked(self.pos) };
+            if next == b' ' || next == b'\t' || next == b'\n' || next == b'\r' {
+                self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
+            }
             
             obj.insert(key, self.parse_value_inner()?);
             
