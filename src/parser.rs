@@ -194,12 +194,12 @@ impl<'a> Parser<'a> {
             }
         }
         
-        // Float path using lexical-core
+        // Float path using fast-float (faster than lexical-core)
         let len = number::skip_number(remaining)
             .ok_or_else(|| Error::new("Invalid number", self.pos))?;
         
         let s = unsafe { std::str::from_utf8_unchecked(self.input.get_unchecked(self.pos..self.pos + len)) };
-        let n: f64 = lexical_core::parse(s.as_bytes())
+        let n: f64 = fast_float::parse(s)
             .map_err(|_| Error::new("Invalid number", self.pos))?;
         self.pos += len;
         Ok(Value::Number(n))
