@@ -15,21 +15,32 @@ pub unsafe fn skip_whitespace_simd(data: &[u8]) -> usize {
         return 0;
     }
 
-    let spaces = _mm_set1_epi8(0x20);
-    let tabs = _mm_set1_epi8(0x09);
-    let newlines = _mm_set1_epi8(0x0a);
-    let crs = _mm_set1_epi8(0x0d);
+    // Create lookup: whitespace chars (space=32, tab=9, newline=10, cr=13)
+    // Use a single comparison trick: for ws chars, (c - 1) < 14 where bits 9,10,13 are set
+    // Actually simpler: use signed comparison trick
+    // ws if c == 32 OR (c >= 9 AND c <= 13)
+    // Optimized: create mask where bit c is set for ws chars
+    let ws_mask = _mm_setr_epi8(
+        0, 0, 0, 0, 0, 0, 0, 0,  // 0-7: not ws
+        0, 1, 1, 1, 1, 1, 0, 0   // 8-15: 9,10,11,12,13 are ws
+    );
+    
+    let spaces = _mm_set1_epi8(32);  // space character
 
     let mut offset = 0;
     let chunks = data.len() / 16;
 
     for _ in 0..chunks {
         let chunk = _mm_loadu_si128(data.as_ptr().add(offset) as *const __m128i);
+        
+        // Check for space (32)
         let eq_space = _mm_cmpeq_epi8(chunk, spaces);
-        let eq_tab = _mm_cmpeq_epi8(chunk, tabs);
-        let eq_newline = _mm_cmpeq_epi8(chunk, newlines);
-        let eq_cr = _mm_cmpeq_epi8(chunk, crs);
-        let ws = _mm_or_si128(_mm_or_si128(eq_space, eq_tab), _mm_or_si128(eq_newline, eq_cr));
+        
+        // Check for 9-13: subtract 9, check if < 5 using unsigned comparison
+        let shifted = _mm_sub_epi8(chunk, _mm_set1_epi8(9));
+        let in_range = _mm_cmplt_epi8(shifted, _mm_set1_epi8(5));
+        
+        let ws = _mm_or_si128(eq_space, in_range);
         let mask = _mm_movemask_epi8(ws) as u32;
 
         if mask == 0xffff {
