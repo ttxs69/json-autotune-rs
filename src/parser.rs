@@ -120,8 +120,8 @@ impl<'a> Parser<'a> {
         if !has_escapes {
             // Fast path: create String from bytes
             let raw = unsafe { remaining.get_unchecked(..end) };
-            let s = unsafe { std::str::from_utf8_unchecked(raw) }.to_owned();
-            return Ok(Value::String(s));
+            let s = unsafe { std::str::from_utf8_unchecked(raw) };
+            return Ok(Value::String(s.into()));
         }
         
         // Slow path: handle escapes
@@ -171,7 +171,7 @@ impl<'a> Parser<'a> {
             }
         }
         
-        Ok(Value::String(unsafe { String::from_utf8_unchecked(result) }))
+        Ok(Value::String(unsafe { String::from_utf8_unchecked(result) }.into_boxed_str()))
     }
 
     #[inline(always)]

@@ -5,9 +5,9 @@ pub enum Value {
     Null,
     Bool(bool),
     Number(f64),
-    String(String),
+    String(Box<str>),  // More compact than String (no capacity field)
     Array(Vec<Value>),
-    Object(FxHashMap<String, Value>),
+    Object(FxHashMap<Box<str>, Value>),
 }
 
 impl Value {
@@ -31,14 +31,14 @@ impl Value {
     }
 
     pub fn as_str(&self) -> Option<&str> {
-        match self { Value::String(s) => Some(s), _ => None }
+        match self { Value::String(s) => Some(s.as_ref()), _ => None }
     }
 
     pub fn as_array(&self) -> Option<&Vec<Value>> {
         match self { Value::Array(a) => Some(a), _ => None }
     }
 
-    pub fn as_object(&self) -> Option<&FxHashMap<String, Value>> {
+    pub fn as_object(&self) -> Option<&FxHashMap<Box<str>, Value>> {
         match self { Value::Object(o) => Some(o), _ => None }
     }
 }
