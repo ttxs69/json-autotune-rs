@@ -5,12 +5,13 @@ use foldhash::fast::FixedState;
 // Use SmartString for inline small strings (<= 23 bytes on 64-bit)
 pub type JsonString = SmartString<smartstring::LazyCompact>;
 
-// Small object optimization: use Vec for objects with <= 4 fields
-// This is faster than HashMap for small objects due to no hashing overhead
+// Small object optimization: use inline array for objects with <= 3 fields
+// This avoids heap allocation entirely for very small objects
 #[derive(Debug, Clone, PartialEq)]
 pub enum Object {
-    Small(Vec<(JsonString, Value)>),  // <= 4 fields
-    Large(HashMap<JsonString, Value, FixedState>),  // > 4 fields
+    Tiny(Box<[(JsonString, Value); 3]>),  // <= 3 fields, inline storage
+    Small(Vec<(JsonString, Value)>),  // 4-8 fields
+    Large(HashMap<JsonString, Value, FixedState>),  // > 8 fields
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -71,6 +72,9 @@ impl std::ops::Index<&str> for Value {
     fn index(&self, key: &str) -> &Self::Output {
         static NULL: Value = Value::Null;
         match self { 
+            Value::Object(Object::Tiny(arr)) => {
+                arr.iter().find(|(k, _)| k.as_str() == key).map(|(_, v)| v).unwrap_or(&NULL)
+            }
             Value::Object(Object::Small(v)) => {
                 v.iter().find(|(k, _)| k.as_str() == key).map(|(_, v)| v).unwrap_or(&NULL)
             }

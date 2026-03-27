@@ -254,11 +254,23 @@ impl<'a> Parser<'a> {
         
         if self.pos < self.input.len() && unsafe { *self.input.get_unchecked(self.pos) } == b'}' {
             self.pos += 1;
-            return Ok(Value::Object(Object::Small(Vec::new())));
+            // Empty object: use Tiny with default values
+            let empty_key: JsonString = "".into();
+            return Ok(Value::Object(Object::Tiny(Box::new([
+                (empty_key.clone(), Value::Null),
+                (empty_key.clone(), Value::Null),
+                (empty_key, Value::Null),
+            ]))));
         }
 
-        // Collect fields in a Vec first (avoids HashMap overhead for small objects)
-        let mut fields: Vec<(JsonString, Value)> = Vec::with_capacity(4);
+        // Collect fields in a small inline array first
+        let mut tiny: [(JsonString, Value); 3] = [
+            ("".into(), Value::Null),
+            ("".into(), Value::Null),
+            ("".into(), Value::Null),
+        ];
+        let mut tiny_count = 0;
+        let mut fields: Option<Vec<(JsonString, Value)>> = None;
 
         loop {
             // Key
@@ -282,7 +294,21 @@ impl<'a> Parser<'a> {
                 self.pos += 1 + simd::skip_whitespace(unsafe { self.input.get_unchecked(vpos + 1..) });
             }
             
-            fields.push((key, self.parse_value_inner()?));
+            let value = self.parse_value_inner()?;
+            
+            // Store in tiny array or spill to Vec
+            if fields.is_none() && tiny_count < 3 {
+                tiny[tiny_count] = (key, value);
+                tiny_count += 1;
+            } else {
+                if fields.is_none() {
+                    fields = Some(Vec::with_capacity(8));
+                    for i in 0..tiny_count {
+                        fields.as_mut().unwrap().push(tiny[i].clone());
+                    }
+                }
+                fields.as_mut().unwrap().push((key, value));
+            }
             
             // Next - skip whitespace before comma/brace
             let npos = self.pos;
@@ -302,15 +328,20 @@ impl<'a> Parser<'a> {
             }
         }
         
-        // Use Vec for small objects (<=4 fields), HashMap for larger
-        let obj = if fields.len() <= 4 {
-            Object::Small(fields)
-        } else {
-            let mut map = HashMap::with_capacity_and_hasher(fields.len(), FixedState::default());
-            for (k, v) in fields {
-                map.insert(k, v);
+        // Build result based on size
+        let obj = match (fields, tiny_count) {
+            (Some(f), _) if f.len() <= 8 => Object::Small(f),
+            (Some(f), _) => {
+                let mut map = HashMap::with_capacity_and_hasher(f.len(), FixedState::default());
+                for (k, v) in f {
+                    map.insert(k, v);
+                }
+                Object::Large(map)
             }
-            Object::Large(map)
+            (None, _) => {
+                // Tiny: already filled
+                Object::Tiny(Box::new(tiny))
+            }
         };
         
         Ok(Value::Object(obj))
