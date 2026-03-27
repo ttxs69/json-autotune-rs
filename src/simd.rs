@@ -58,7 +58,16 @@ pub fn skip_whitespace_simd(data: &[u8]) -> usize {
 }
 
 pub fn skip_whitespace_scalar(data: &[u8]) -> usize {
-    // Pointer-based iteration for maximum speed
+    // Optimized: use single comparison for common whitespace
+    // space=32, tab=9, newline=10, cr=13
+    // Fast path: check if first byte is not whitespace
+    if data.is_empty() { return 0; }
+    let first = data[0];
+    if first != b' ' && first != b'\t' && first != b'\n' && first != b'\r' {
+        return 0;
+    }
+    
+    // Pointer-based iteration
     let ptr = data.as_ptr();
     let len = data.len();
     let mut i = 0;
