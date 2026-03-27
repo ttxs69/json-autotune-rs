@@ -1,8 +1,8 @@
 //! JSON parser - highly optimized
 
 use crate::{Error, Value, simd, number};
-use hashbrown::HashMap;
-use crate::value::JsonString;
+use crate::value::{JsonString, JsonMap};
+use foldhash::fast::FixedState;
 
 // Lookup table for keyword matching (faster than memcmp for short words)
 const KEYWORD_NULL: u32 = 0x6c6c756e; // "null" as u32 (little-endian)
@@ -253,11 +253,11 @@ impl<'a> Parser<'a> {
         
         if self.pos < self.input.len() && unsafe { *self.input.get_unchecked(self.pos) } == b'}' {
             self.pos += 1;
-            return Ok(Value::Object(HashMap::new()));
+            return Ok(Value::Object(JsonMap::with_hasher(FixedState::default())));
         }
 
-        // Pre-allocate with capacity 2 - medium test objects have exactly 2 fields
-        let mut obj = HashMap::with_capacity(2);
+        // Pre-allocate with capacity 3 - most small objects have 2-3 fields
+        let mut obj = JsonMap::with_capacity_and_hasher(3, FixedState::default());
 
         loop {
             // Key

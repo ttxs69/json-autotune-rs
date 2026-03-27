@@ -1,9 +1,13 @@
 use hashbrown::HashMap;
 use smartstring::SmartString;
+use foldhash::fast::FixedState;
 
 // Use SmartString for inline small strings (<= 23 bytes on 64-bit)
 // This avoids heap allocation for short strings
 pub type JsonString = SmartString<smartstring::LazyCompact>;
+
+// Use foldhash for faster hashing
+pub type JsonMap<V> = HashMap<JsonString, V, FixedState>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
@@ -12,7 +16,7 @@ pub enum Value {
     Number(f64),
     String(JsonString),
     Array(Vec<Value>),
-    Object(HashMap<JsonString, Value>),
+    Object(JsonMap<Value>),
 }
 
 impl Value {
@@ -43,7 +47,7 @@ impl Value {
         match self { Value::Array(a) => Some(a), _ => None }
     }
 
-    pub fn as_object(&self) -> Option<&HashMap<JsonString, Value>> {
+    pub fn as_object(&self) -> Option<&JsonMap<Value>> {
         match self { Value::Object(o) => Some(o), _ => None }
     }
 }
