@@ -260,7 +260,10 @@ impl<'a> Parser<'a> {
 
         loop {
             // Key
-            let key = self.parse_string()?;
+            let key = match self.parse_string()? {
+                Value::String(s) => s,
+                _ => unreachable!(),
+            };
             
             // Colon - skip whitespace before (rare in compact JSON)
             let colon_pos = self.pos;
@@ -280,7 +283,7 @@ impl<'a> Parser<'a> {
                 self.pos += 1 + simd::skip_whitespace(unsafe { self.input.get_unchecked(vpos + 1..) });
             }
             
-            obj.insert(match key { Value::String(s) => s, _ => unreachable!() }, self.parse_value_inner()?);
+            obj.insert(key, self.parse_value_inner()?);
             
             // Next - skip whitespace before comma/brace
             let npos = self.pos;
