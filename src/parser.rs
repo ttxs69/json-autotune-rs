@@ -263,43 +263,43 @@ impl<'a> Parser<'a> {
             return Ok(Value::Object(FxHashMap::default()));
         }
 
-        // Pre-allocate with capacity 3 - most JSON objects are small (avg ~3 fields)
-        let mut obj = FxHashMap::with_capacity_and_hasher(3, Default::default());
+        // Pre-allocate with capacity 2 - medium test objects have exactly 2 fields
+        let mut obj = FxHashMap::with_capacity_and_hasher(2, Default::default());
 
         loop {
-            if unsafe { *self.input.get_unchecked(self.pos) } != b'"' {
-                return Err(Error::new("Expected string key", self.pos));
+            // Key
+            let key = self.parse_string()?;
+            
+            // Colon - skip whitespace before (rare in compact JSON)
+            let colon_pos = self.pos;
+            let c = unsafe { *self.input.get_unchecked(colon_pos) };
+            if c == b' ' || c == b'\t' || c == b'\n' || c == b'\r' {
+                self.pos += 1 + simd::skip_whitespace(unsafe { self.input.get_unchecked(colon_pos + 1..) });
             }
-            
-            let key = match self.parse_string()? {
-                Value::String(s) => s,
-                _ => unreachable!(),
-            };
-            
-            self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
-            
             if unsafe { *self.input.get_unchecked(self.pos) } != b':' {
                 return Err(Error::new("Expected ':'", self.pos));
             }
             self.pos += 1;
-            // Fast check: colon usually followed by non-whitespace in compact JSON
-            let next = unsafe { *self.input.get_unchecked(self.pos) };
-            if next <= b' ' {
-                self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
+            
+            // Value - skip whitespace after colon (rare)
+            let vpos = self.pos;
+            let vc = unsafe { *self.input.get_unchecked(vpos) };
+            if vc == b' ' || vc == b'\t' || vc == b'\n' || vc == b'\r' {
+                self.pos += 1 + simd::skip_whitespace(unsafe { self.input.get_unchecked(vpos + 1..) });
             }
             
-            obj.insert(key, self.parse_value_inner()?);
+            obj.insert(match key { Value::String(s) => s, _ => unreachable!() }, self.parse_value_inner()?);
             
-            self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
+            // Next - skip whitespace before comma/brace
+            let npos = self.pos;
+            let nc = unsafe { *self.input.get_unchecked(npos) };
+            if nc == b' ' || nc == b'\t' || nc == b'\n' || nc == b'\r' {
+                self.pos += 1 + simd::skip_whitespace(unsafe { self.input.get_unchecked(npos + 1..) });
+            }
             
             let b = unsafe { *self.input.get_unchecked(self.pos) };
             if b == b',' { 
                 self.pos += 1;
-                // Fast check for whitespace after comma
-                let next = unsafe { *self.input.get_unchecked(self.pos) };
-                if next <= b' ' {
-                    self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
-                }
             } else if b == b'}' { 
                 self.pos += 1; 
                 break;
