@@ -235,7 +235,7 @@ impl<'a> Parser<'a> {
                 self.pos += 1;
                 // Skip whitespace after comma (rare in compact JSON)
                 let next = unsafe { *self.input.get_unchecked(self.pos) };
-                if next == b' ' || next == b'\t' || next == b'\n' || next == b'\r' {
+                if next <= b' ' {
                     self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
                 }
             } else if b == b']' { 
@@ -280,7 +280,7 @@ impl<'a> Parser<'a> {
             self.pos += 1;
             // Fast check: colon usually followed by non-whitespace in compact JSON
             let next = unsafe { *self.input.get_unchecked(self.pos) };
-            if next == b' ' || next == b'\t' || next == b'\n' || next == b'\r' {
+            if next <= b' ' {
                 self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
             }
             
@@ -293,7 +293,7 @@ impl<'a> Parser<'a> {
                 self.pos += 1;
                 // Fast check for whitespace after comma
                 let next = unsafe { *self.input.get_unchecked(self.pos) };
-                if next == b' ' || next == b'\t' || next == b'\n' || next == b'\r' {
+                if next <= b' ' {
                     self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
                 }
             } else if b == b'}' { 
