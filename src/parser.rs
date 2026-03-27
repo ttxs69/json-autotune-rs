@@ -118,17 +118,9 @@ impl<'a> Parser<'a> {
         self.pos += end + 1;
         
         if !has_escapes {
-            // Fast path: directly create String from bytes
+            // Fast path: create String from bytes
             let raw = unsafe { remaining.get_unchecked(..end) };
-            let mut s = String::with_capacity(end);
-            unsafe {
-                std::ptr::copy_nonoverlapping(
-                    raw.as_ptr(),
-                    s.as_mut_ptr() as *mut u8,
-                    end
-                );
-                s.as_mut_vec().set_len(end);
-            }
+            let s = unsafe { std::str::from_utf8_unchecked(raw) }.to_owned();
             return Ok(Value::String(s));
         }
         
