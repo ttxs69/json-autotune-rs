@@ -4,7 +4,6 @@ use crate::{Error, Value, simd, number};
 use crate::value::{JsonString, Object};
 use foldhash::fast::FixedState;
 use hashbrown::HashMap;
-use smartstring::SmartString;
 
 const KEYWORD_NULL: u32 = 0x6c6c756e;
 const KEYWORD_TRUE: u32 = 0x65757274;
@@ -197,7 +196,7 @@ impl<'a> Parser<'a> {
         let mut arr = Vec::with_capacity(8);
         loop {
             arr.push(self.parse_value_inner()?);
-            // Fast path: next char is structural, no whitespace
+            // Fast path: next char is structural, no whitespace needed
             let b = unsafe { *self.input.get_unchecked(self.pos) };
             if b == b',' { 
                 self.pos += 1;
@@ -221,68 +220,50 @@ impl<'a> Parser<'a> {
     #[inline(always)]
     fn parse_object(&mut self) -> Result<Value, Error> {
         self.pos += 1;
-        self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
-        
-        if self.pos < self.input.len() && unsafe { *self.input.get_unchecked(self.pos) } == b'}' {
-            self.pos += 1;
-            return Ok(Value::Object(Object::Tiny(Box::new([
-                (SmartString::new(), Value::Null),
-                (SmartString::new(), Value::Null),
-                (SmartString::new(), Value::Null),
-            ]))));
+        // Fast path: check first byte
+        if self.pos < self.input.len() {
+            let first = unsafe { *self.input.get_unchecked(self.pos) };
+            if first == b'}' { self.pos += 1; return Ok(Value::Object(Object::Empty)); }
+            if first <= b' ' {
+                self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
+                if self.pos < self.input.len() && unsafe { *self.input.get_unchecked(self.pos) } == b'}' {
+                    self.pos += 1; return Ok(Value::Object(Object::Empty));
+                }
+            }
         }
 
-        // Always use Vec - simpler and Vec with capacity 4 avoids reallocation for small objects
         let mut fields = Vec::with_capacity(4);
 
         loop {
-            // Key
             let key = if let Value::String(s) = self.parse_string()? { s } else { unreachable!() };
             
-            // Colon
-            let c = unsafe { *self.input.get_unchecked(self.pos) };
-            if c == b':' {
-                self.pos += 1;
-            } else {
-                self.pos += 1 + simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
-                if unsafe { *self.input.get_unchecked(self.pos) } != b':' {
-                    return Err(Error::new("Expected ':'", self.pos));
-                }
-                self.pos += 1;
+            if unsafe { *self.input.get_unchecked(self.pos) } != b':' {
+                return Err(Error::new("Expected ':'", self.pos));
             }
+            self.pos += 1;
             
-            // Value
-            let vc = unsafe { *self.input.get_unchecked(self.pos) };
-            if vc == b' ' || vc == b'\t' || vc == b'\n' || vc == b'\r' {
-                self.pos += 1 + simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
-            }
             let value = self.parse_value_inner()?;
-            
-            // Store field
             fields.push((key, value));
             
-            // Next
-            let nc = unsafe { *self.input.get_unchecked(self.pos) };
-            if nc == b' ' || nc == b'\t' || nc == b'\n' || nc == b'\r' {
-                self.pos += 1 + simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
-            }
             let b = unsafe { *self.input.get_unchecked(self.pos) };
             if b == b',' { 
                 self.pos += 1;
             } else if b == b'}' { 
                 self.pos += 1; 
                 break;
+            } else if b == b' ' || b == b'\t' || b == b'\n' || b == b'\r' {
+                self.pos += 1;
+                self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
+                let nb = unsafe { *self.input.get_unchecked(self.pos) };
+                if nb == b',' { self.pos += 1; }
+                else if nb == b'}' { self.pos += 1; break; }
+                else { return Err(Error::new("Expected ',' or '}'", self.pos)); }
             } else {
                 return Err(Error::new("Expected ',' or '}'", self.pos));
             }
         }
         
-        // Build result
-        let obj = if fields.len() <= 3 {
-            // For tiny objects, convert Vec to Box<[T; 3]> to avoid heap per-field allocation
-            // But keep as Small(Vec) for simplicity - the Box allocation is a one-time cost
-            Object::Small(fields)
-        } else if fields.len() <= 8 {
+        let obj = if fields.len() <= 8 {
             Object::Small(fields)
         } else {
             let mut map = HashMap::with_capacity_and_hasher(fields.len(), FixedState::default());
@@ -304,4 +285,6 @@ mod tests {
     #[test] fn test_string() { assert_eq!(parse(r#""hello""#).unwrap(), Value::String("hello".into())); }
     #[test] fn test_array() { assert!(parse("[1,2,3]").unwrap().is_array()); }
     #[test] fn test_object() { assert!(parse(r#"{"a":1}"#).unwrap().is_object()); }
+    #[test] fn test_empty_array() { assert!(parse("[]").unwrap().is_array()); }
+    #[test] fn test_empty_object() { assert!(parse("{}").unwrap().is_object()); }
 }
