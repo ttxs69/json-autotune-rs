@@ -2,7 +2,7 @@
 
 use crate::{Error, Value, simd, number};
 use crate::value::{JsonString, Object};
-use foldhash::fast::FixedState;
+use ahash::RandomState;
 use hashbrown::HashMap;
 
 const KEYWORD_NULL: u32 = 0x6c6c756e;
@@ -266,7 +266,7 @@ impl<'a> Parser<'a> {
         let obj = if fields.len() <= 8 {
             Object::Small(fields)
         } else {
-            let mut map = HashMap::with_capacity_and_hasher(fields.len(), FixedState::default());
+            let mut map = HashMap::with_capacity_and_hasher(fields.len(), RandomState::default());
             for (k, v) in fields { map.insert(k, v); }
             Object::Large(map)
         };
