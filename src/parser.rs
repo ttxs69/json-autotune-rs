@@ -183,25 +183,34 @@ impl<'a> Parser<'a> {
     #[inline(always)]
     fn parse_array(&mut self) -> Result<Value, Error> {
         self.pos += 1;
-        self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
-        if self.pos < self.input.len() && unsafe { *self.input.get_unchecked(self.pos) } == b']' {
-            self.pos += 1;
-            return Ok(Value::Array(Vec::new()));
+        // Fast path: check first byte without SIMD
+        if self.pos < self.input.len() {
+            let first = unsafe { *self.input.get_unchecked(self.pos) };
+            if first == b']' { self.pos += 1; return Ok(Value::Array(Vec::new())); }
+            if first <= b' ' {
+                self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
+                if self.pos < self.input.len() && unsafe { *self.input.get_unchecked(self.pos) } == b']' {
+                    self.pos += 1; return Ok(Value::Array(Vec::new()));
+                }
+            }
         }
         let mut arr = Vec::with_capacity(8);
         loop {
             arr.push(self.parse_value_inner()?);
-            self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
+            // Fast path: next char is structural, no whitespace
             let b = unsafe { *self.input.get_unchecked(self.pos) };
             if b == b',' { 
                 self.pos += 1;
-                let next = unsafe { *self.input.get_unchecked(self.pos) };
-                if next <= b' ' {
-                    self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
-                }
             } else if b == b']' { 
                 self.pos += 1; 
                 break;
+            } else if b == b' ' || b == b'\t' || b == b'\n' || b == b'\r' {
+                self.pos += 1;
+                self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
+                let nb = unsafe { *self.input.get_unchecked(self.pos) };
+                if nb == b',' { self.pos += 1; }
+                else if nb == b']' { self.pos += 1; break; }
+                else { return Err(Error::new("Expected ',' or ']'", self.pos)); }
             } else {
                 return Err(Error::new("Expected ',' or ']'", self.pos));
             }
