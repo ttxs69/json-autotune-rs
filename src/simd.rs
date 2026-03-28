@@ -9,7 +9,7 @@ use std::arch::x86_64::*;
 pub unsafe fn skip_whitespace_avx2(data: &[u8]) -> usize {
     if data.len() < 32 { return skip_whitespace_scalar(data); }
 
-    let first = unsafe { *data.as_ptr() };
+    let first = *data.as_ptr();
     if first != b' ' && first != b'\t' && first != b'\n' && first != b'\r' {
         return 0;
     }
@@ -22,7 +22,7 @@ pub unsafe fn skip_whitespace_avx2(data: &[u8]) -> usize {
     let end = data.len();
 
     while offset + 32 <= end {
-        let chunk = unsafe { _mm256_loadu_si256(data.as_ptr().add(offset) as *const __m256i) };
+        let chunk = _mm256_loadu_si256(data.as_ptr().add(offset) as *const __m256i);
         
         let eq_space = _mm256_cmpeq_epi8(chunk, spaces);
         let shifted = _mm256_sub_epi8(chunk, nine);
@@ -62,7 +62,7 @@ pub fn skip_whitespace_scalar(data: &[u8]) -> usize {
     len
 }
 
-/// Find string end using AVX2.
+/// Find string end using AVX2 - optimized for unescaped strings.
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2")]
 pub unsafe fn find_string_end_avx2(data: &[u8]) -> Option<(usize, bool)> {
@@ -73,41 +73,54 @@ pub unsafe fn find_string_end_avx2(data: &[u8]) -> Option<(usize, bool)> {
 
     let mut offset = 0;
     let end = data.len();
-    let mut has_escapes = false;
 
+    // Fast path: scan for quote without escape tracking
     while offset + 32 <= end {
-        let chunk = unsafe { _mm256_loadu_si256(data.as_ptr().add(offset) as *const __m256i) };
+        let chunk = _mm256_loadu_si256(data.as_ptr().add(offset) as *const __m256i);
         let quote_mask = _mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk, quotes)) as u32;
         let backslash_mask = _mm256_movemask_epi8(_mm256_cmpeq_epi8(chunk, backslashes)) as u32;
         
+        // No backslashes: if we found a quote, return immediately (no escapes)
         if backslash_mask == 0 && quote_mask != 0 {
             let pos = offset + quote_mask.trailing_zeros() as usize;
-            return Some((pos, has_escapes));
+            return Some((pos, false));
         }
-        if backslash_mask != 0 { has_escapes = true; }
         
+        // No quotes: continue scanning
         if quote_mask == 0 {
             offset += 32;
             continue;
         }
         
-        // Mixed: scan byte-by-byte for correct escape handling
+        // Found both quote and backslash in same chunk - need byte-by-byte
         let mut escaped = false;
         let mut i = 0;
         while i < 32 && offset + i < end {
-            let b = unsafe { *data.as_ptr().add(offset + i) };
+            let b = *data.as_ptr().add(offset + i);
             if b == b'\\' { escaped = !escaped; }
-            else if b == b'"' && !escaped { return Some((offset + i, has_escapes)); }
+            else if b == b'"' && !escaped { return Some((offset + i, true)); }
             else { escaped = false; }
             i += 1;
         }
         offset += 32;
+        
+        // Remaining bytes must be scalar with escape tracking
+        let mut escaped = false;
+        let mut has_escapes = true;
+        for i in offset..end {
+            let b = *data.as_ptr().add(i);
+            if b == b'\\' { escaped = !escaped; }
+            else if b == b'"' && !escaped { return Some((i, has_escapes)); }
+            else { escaped = false; }
+        }
+        return None;
     }
 
     // Tail
     let mut escaped = false;
+    let mut has_escapes = false;
     for i in offset..end {
-        let b = unsafe { *data.as_ptr().add(i) };
+        let b = *data.as_ptr().add(i);
         if b == b'\\' { escaped = !escaped; has_escapes = true; }
         else if b == b'"' && !escaped { return Some((i, has_escapes)); }
         else { escaped = false; }
