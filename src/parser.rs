@@ -5,19 +5,14 @@ use crate::value::{JsonString, Object};
 use foldhash::fast::FixedState;
 use hashbrown::HashMap;
 use smartstring::SmartString;
-use std::mem::MaybeUninit;
 
-// Lookup table for keyword matching (faster than memcmp for short words)
-const KEYWORD_NULL: u32 = 0x6c6c756e; // "null" as u32 (little-endian)
-const KEYWORD_TRUE: u32 = 0x65757274; // "true" as u32 (little-endian)
+const KEYWORD_NULL: u32 = 0x6c6c756e;
+const KEYWORD_TRUE: u32 = 0x65757274;
 
 pub fn parse(input: &str) -> Result<Value, Error> {
     let bytes = input.as_bytes();
-    
-    // Minimal Parser struct for fast parsing
     let mut p = Parser { input: bytes, pos: 0 };
     let v = p.parse_value()?;
-    // Inline skip_ws check for trailing data
     p.pos += simd::skip_whitespace(unsafe { p.input.get_unchecked(p.pos..) });
     if p.pos < p.input.len() {
         return Err(Error::new("Trailing data", p.pos));
@@ -33,18 +28,13 @@ struct Parser<'a> {
 impl<'a> Parser<'a> {
     #[inline(always)]
     fn parse_value(&mut self) -> Result<Value, Error> {
-        // Inline skip_ws with get_unchecked
         self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
         self.parse_value_inner()
     }
 
-    /// Parse value without skipping whitespace first (caller already did)
     #[inline(always)]
     fn parse_value_inner(&mut self) -> Result<Value, Error> {
-        // Use get_unchecked for faster byte access
         let b = unsafe { *self.input.get_unchecked(self.pos) };
-        
-        // Fast dispatch - most common first
         match b {
             b'"' => self.parse_string(),
             b'{' => self.parse_object(),
@@ -59,7 +49,6 @@ impl<'a> Parser<'a> {
 
     #[inline(always)]
     fn parse_null(&mut self) -> Result<Value, Error> {
-        // Fast path: read 4 bytes as u32 and compare
         if self.pos + 4 <= self.input.len() {
             let word = unsafe {
                 u32::from_le_bytes(*(self.input.as_ptr().add(self.pos) as *const [u8; 4]))
@@ -74,7 +63,6 @@ impl<'a> Parser<'a> {
 
     #[inline(always)]
     fn parse_true(&mut self) -> Result<Value, Error> {
-        // Fast path: read 4 bytes as u32 and compare
         if self.pos + 4 > self.input.len() {
             return Err(Error::new("Expected true", self.pos));
         }
@@ -101,7 +89,7 @@ impl<'a> Parser<'a> {
         let suffix = unsafe {
             u32::from_le_bytes(*(self.input.as_ptr().add(self.pos + 1) as *const [u8; 4]))
         };
-        if suffix == 0x65736c61 { // "alse" in little-endian
+        if suffix == 0x65736c61 {
             self.pos += 5;
             Ok(Value::Bool(false))
         } else {
@@ -111,24 +99,16 @@ impl<'a> Parser<'a> {
 
     #[inline(always)]
     fn parse_string(&mut self) -> Result<Value, Error> {
-        self.pos += 1; // skip quote
-        
-        // Use get_unchecked for faster slice access
+        self.pos += 1;
         let remaining = unsafe { self.input.get_unchecked(self.pos..) };
-        
         let (end, has_escapes) = simd::find_string_end(remaining)
             .ok_or_else(|| Error::new("Unterminated string", self.pos))?;
-        
         self.pos += end + 1;
-        
         if !has_escapes {
-            // Fast path: create String from bytes
             let raw = unsafe { remaining.get_unchecked(..end) };
             let s: JsonString = unsafe { std::str::from_utf8_unchecked(raw) }.into();
             return Ok(Value::String(s));
         }
-        
-        // Slow path: handle escapes
         let raw = unsafe { remaining.get_unchecked(..end) };
         self.unescape(raw)
     }
@@ -137,7 +117,6 @@ impl<'a> Parser<'a> {
     fn unescape(&self, raw: &[u8]) -> Result<Value, Error> {
         let mut result = Vec::with_capacity(raw.len());
         let mut i = 0;
-        
         while i < raw.len() {
             if raw[i] == b'\\' && i + 1 < raw.len() {
                 match raw[i + 1] {
@@ -174,34 +153,26 @@ impl<'a> Parser<'a> {
                 i += 1;
             }
         }
-        
         Ok(Value::String(unsafe { String::from_utf8_unchecked(result) }.into()))
     }
 
     #[inline(always)]
     fn parse_number(&mut self) -> Result<Value, Error> {
         let remaining = unsafe { self.input.get_unchecked(self.pos..) };
-        
-        // Fast integer path - most numbers in JSON are integers
         if let Some((val, len)) = number::parse_integer(remaining) {
             let next_pos = self.pos + len;
-            // Check if this is a pure integer (no . or e/E)
             if next_pos >= self.input.len() {
                 self.pos = next_pos;
                 return Ok(Value::Number(val as f64));
             }
             let next_byte = unsafe { *self.input.get_unchecked(next_pos) };
-            // ASCII: '.'=46, 'E'=69, 'e'=101 - check with single comparison
             if next_byte != b'.' && next_byte != b'e' && next_byte != b'E' {
                 self.pos = next_pos;
                 return Ok(Value::Number(val as f64));
             }
         }
-        
-        // Float path using fast-float (faster than lexical-core)
         let len = number::skip_number(remaining)
             .ok_or_else(|| Error::new("Invalid number", self.pos))?;
-        
         let s = unsafe { std::str::from_utf8_unchecked(self.input.get_unchecked(self.pos..self.pos + len)) };
         let n: f64 = fast_float::parse(s)
             .map_err(|_| Error::new("Invalid number", self.pos))?;
@@ -212,28 +183,18 @@ impl<'a> Parser<'a> {
     #[inline(always)]
     fn parse_array(&mut self) -> Result<Value, Error> {
         self.pos += 1;
-        
-        // Inline skip_ws
         self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
-        
         if self.pos < self.input.len() && unsafe { *self.input.get_unchecked(self.pos) } == b']' {
             self.pos += 1;
             return Ok(Value::Array(Vec::new()));
         }
-
-        // Start with capacity 8 - balance between small and large arrays
         let mut arr = Vec::with_capacity(8);
-
         loop {
             arr.push(self.parse_value_inner()?);
-            
-            // Inline skip_ws after value
             self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
-            
             let b = unsafe { *self.input.get_unchecked(self.pos) };
             if b == b',' { 
                 self.pos += 1;
-                // Skip whitespace after comma (rare in compact JSON)
                 let next = unsafe { *self.input.get_unchecked(self.pos) };
                 if next <= b' ' {
                     self.pos += simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
@@ -245,7 +206,6 @@ impl<'a> Parser<'a> {
                 return Err(Error::new("Expected ',' or ']'", self.pos));
             }
         }
-        
         Ok(Value::Array(arr))
     }
 
@@ -263,57 +223,40 @@ impl<'a> Parser<'a> {
             ]))));
         }
 
-        // Use MaybeUninit to avoid initialization overhead
-        let mut tiny: [std::mem::MaybeUninit<(JsonString, Value)>; 3] = unsafe { std::mem::MaybeUninit::uninit().assume_init() };
-        let mut tiny_count = 0usize;
-        let mut fields: Option<Vec<(JsonString, Value)>> = None;
+        // Always use Vec - simpler and Vec with capacity 4 avoids reallocation for small objects
+        let mut fields = Vec::with_capacity(4);
 
         loop {
             // Key
             let key = if let Value::String(s) = self.parse_string()? { s } else { unreachable!() };
             
             // Colon
-            let colon_pos = self.pos;
-            let c = unsafe { *self.input.get_unchecked(colon_pos) };
-            if c == b' ' || c == b'\t' || c == b'\n' || c == b'\r' {
-                self.pos += 1 + simd::skip_whitespace(unsafe { self.input.get_unchecked(colon_pos + 1..) });
+            let c = unsafe { *self.input.get_unchecked(self.pos) };
+            if c == b':' {
+                self.pos += 1;
+            } else {
+                self.pos += 1 + simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
+                if unsafe { *self.input.get_unchecked(self.pos) } != b':' {
+                    return Err(Error::new("Expected ':'", self.pos));
+                }
+                self.pos += 1;
             }
-            if unsafe { *self.input.get_unchecked(self.pos) } != b':' {
-                return Err(Error::new("Expected ':'", self.pos));
-            }
-            self.pos += 1;
             
             // Value
-            let vpos = self.pos;
-            let vc = unsafe { *self.input.get_unchecked(vpos) };
+            let vc = unsafe { *self.input.get_unchecked(self.pos) };
             if vc == b' ' || vc == b'\t' || vc == b'\n' || vc == b'\r' {
-                self.pos += 1 + simd::skip_whitespace(unsafe { self.input.get_unchecked(vpos + 1..) });
+                self.pos += 1 + simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
             }
-            
             let value = self.parse_value_inner()?;
             
-            // Store
-            if fields.is_none() && tiny_count < 3 {
-                unsafe { tiny[tiny_count].as_mut_ptr().write((key, value)) };
-                tiny_count += 1;
-            } else {
-                if fields.is_none() {
-                    fields = Some(Vec::with_capacity(8));
-                    for i in 0..tiny_count {
-                        let kv = unsafe { tiny[i].assume_init_read() };
-                        fields.as_mut().unwrap().push(kv);
-                    }
-                }
-                fields.as_mut().unwrap().push((key, value));
-            }
+            // Store field
+            fields.push((key, value));
             
             // Next
-            let npos = self.pos;
-            let nc = unsafe { *self.input.get_unchecked(npos) };
+            let nc = unsafe { *self.input.get_unchecked(self.pos) };
             if nc == b' ' || nc == b'\t' || nc == b'\n' || nc == b'\r' {
-                self.pos += 1 + simd::skip_whitespace(unsafe { self.input.get_unchecked(npos + 1..) });
+                self.pos += 1 + simd::skip_whitespace(unsafe { self.input.get_unchecked(self.pos..) });
             }
-            
             let b = unsafe { *self.input.get_unchecked(self.pos) };
             if b == b',' { 
                 self.pos += 1;
@@ -326,36 +269,16 @@ impl<'a> Parser<'a> {
         }
         
         // Build result
-        let obj = match (fields, tiny_count) {
-            (Some(f), _) if f.len() <= 8 => Object::Small(f),
-            (Some(f), _) => {
-                let mut map = HashMap::with_capacity_and_hasher(f.len(), FixedState::default());
-                for (k, v) in f {
-                    map.insert(k, v);
-                }
-                Object::Large(map)
-            }
-            (None, 0) => Object::Tiny(Box::new([
-                (SmartString::new(), Value::Null),
-                (SmartString::new(), Value::Null),
-                (SmartString::new(), Value::Null),
-            ])),
-            (None, 1) => {
-                let kv0 = unsafe { tiny[0].assume_init_read() };
-                Object::Tiny(Box::new([kv0, (SmartString::new(), Value::Null), (SmartString::new(), Value::Null)]))
-            }
-            (None, 2) => {
-                let kv0 = unsafe { tiny[0].assume_init_read() };
-                let kv1 = unsafe { tiny[1].assume_init_read() };
-                Object::Tiny(Box::new([kv0, kv1, (SmartString::new(), Value::Null)]))
-            }
-            (None, 3) => {
-                let kv0 = unsafe { tiny[0].assume_init_read() };
-                let kv1 = unsafe { tiny[1].assume_init_read() };
-                let kv2 = unsafe { tiny[2].assume_init_read() };
-                Object::Tiny(Box::new([kv0, kv1, kv2]))
-            }
-            _ => unreachable!(),
+        let obj = if fields.len() <= 3 {
+            // For tiny objects, convert Vec to Box<[T; 3]> to avoid heap per-field allocation
+            // But keep as Small(Vec) for simplicity - the Box allocation is a one-time cost
+            Object::Small(fields)
+        } else if fields.len() <= 8 {
+            Object::Small(fields)
+        } else {
+            let mut map = HashMap::with_capacity_and_hasher(fields.len(), FixedState::default());
+            for (k, v) in fields { map.insert(k, v); }
+            Object::Large(map)
         };
         
         Ok(Value::Object(obj))
