@@ -1,5 +1,4 @@
 use smartstring::SmartString;
-use rustc_hash::FxHashMap;
 
 pub type JsonString = SmartString<smartstring::LazyCompact>;
 
@@ -8,7 +7,7 @@ pub enum Object {
     Empty,  // {}
     Tiny(Box<[(JsonString, Value); 3]>),  // 1-3 fields
     Small(Vec<(JsonString, Value)>),  // 4-8 fields
-    Large(FxHashMap<JsonString, Value>),  // > 8 fields
+    Large(Vec<(JsonString, Value)>),  // > 8 fields (linear search - faster than hash for small N)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -34,7 +33,15 @@ impl Value {
     pub fn as_str(&self) -> Option<&str> { match self { Value::String(s) => Some(s.as_ref()), _ => None } }
     pub fn as_array(&self) -> Option<&Vec<Value>> { match self { Value::Array(a) => Some(a), _ => None } }
     pub fn as_object_small(&self) -> Option<&Vec<(JsonString, Value)>> { match self { Value::Object(Object::Small(v)) => Some(v), _ => None } }
-    pub fn as_object_large(&self) -> Option<&FxHashMap<JsonString, Value>> { match self { Value::Object(Object::Large(m)) => Some(m), _ => None } }
+    pub fn as_object_large(&self) -> Option<&Vec<(JsonString, Value)>> { match self { Value::Object(Object::Large(v)) => Some(v), _ => None } }
+}
+
+#[inline(always)]
+fn lookup_field<'a>(fields: &'a [(JsonString, Value)], key: &str) -> Option<&'a Value> {
+    for (k, v) in fields.iter() {
+        if k.as_str() == key { return Some(v); }
+    }
+    None
 }
 
 impl std::ops::Index<&str> for Value {
@@ -43,9 +50,14 @@ impl std::ops::Index<&str> for Value {
         static NULL: Value = Value::Null;
         match self { 
             Value::Object(Object::Empty) => &NULL,
-            Value::Object(Object::Tiny(arr)) => arr.iter().find(|(k, _)| k.as_str() == key).map(|(_, v)| v).unwrap_or(&NULL),
-            Value::Object(Object::Small(v)) => v.iter().find(|(k, _)| k.as_str() == key).map(|(_, v)| v).unwrap_or(&NULL),
-            Value::Object(Object::Large(m)) => m.get(key).unwrap_or(&NULL),
+            Value::Object(Object::Tiny(arr)) => {
+                for (k, v) in arr.iter() {
+                    if k.as_str() == key { return v; }
+                }
+                &NULL
+            }
+            Value::Object(Object::Small(v)) => lookup_field(v, key).unwrap_or(&NULL),
+            Value::Object(Object::Large(v)) => lookup_field(v, key).unwrap_or(&NULL),
             _ => &NULL,
         }
     }

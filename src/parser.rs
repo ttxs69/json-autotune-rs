@@ -2,7 +2,6 @@
 
 use crate::{Error, Value, simd, number};
 use crate::value::{JsonString, Object};
-use rustc_hash::FxHashMap;
 
 const KEYWORD_NULL: u32 = 0x6c6c756e;
 const KEYWORD_TRUE: u32 = 0x65757274;
@@ -265,10 +264,8 @@ impl<'a> Parser<'a> {
         let obj = if fields.len() <= 8 {
             Object::Small(fields)
         } else {
-            let mut map = FxHashMap::default();
-            map.reserve(fields.len());
-            for (k, v) in fields { map.insert(k, v); }
-            Object::Large(map)
+            // Large objects: use Vec instead of HashMap for speed (hash computation eliminated)
+            Object::Large(fields)
         };
         
         Ok(Value::Object(obj))
