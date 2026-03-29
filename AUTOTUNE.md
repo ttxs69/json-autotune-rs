@@ -42,6 +42,11 @@ fn gen_large() -> String {
 
 ---
 
+## 固定文件（禁止 AI 修改）
+
+- **本文件（AUTOTUNE.md）** — 仅人类可编辑
+- **benches/benchmark.rs** — 固定基准，禁止修改
+
 ## 可变模块（Agent 可修改）
 
 ### `src/parser.rs` - 解析器实现
