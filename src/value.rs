@@ -1,6 +1,5 @@
-use hashbrown::HashMap;
 use smartstring::SmartString;
-use ahash::RandomState;
+use rustc_hash::FxHashMap;
 
 pub type JsonString = SmartString<smartstring::LazyCompact>;
 
@@ -9,7 +8,7 @@ pub enum Object {
     Empty,  // {}
     Tiny(Box<[(JsonString, Value); 3]>),  // 1-3 fields
     Small(Vec<(JsonString, Value)>),  // 4-8 fields
-    Large(HashMap<JsonString, Value, RandomState>),  // > 8 fields
+    Large(FxHashMap<JsonString, Value>),  // > 8 fields
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -35,7 +34,7 @@ impl Value {
     pub fn as_str(&self) -> Option<&str> { match self { Value::String(s) => Some(s.as_ref()), _ => None } }
     pub fn as_array(&self) -> Option<&Vec<Value>> { match self { Value::Array(a) => Some(a), _ => None } }
     pub fn as_object_small(&self) -> Option<&Vec<(JsonString, Value)>> { match self { Value::Object(Object::Small(v)) => Some(v), _ => None } }
-    pub fn as_object_large(&self) -> Option<&HashMap<JsonString, Value, RandomState>> { match self { Value::Object(Object::Large(m)) => Some(m), _ => None } }
+    pub fn as_object_large(&self) -> Option<&FxHashMap<JsonString, Value>> { match self { Value::Object(Object::Large(m)) => Some(m), _ => None } }
 }
 
 impl std::ops::Index<&str> for Value {

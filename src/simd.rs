@@ -106,7 +106,7 @@ pub unsafe fn find_string_end_avx2(data: &[u8]) -> Option<(usize, bool)> {
         
         // Remaining bytes must be scalar with escape tracking
         let mut escaped = false;
-        let mut has_escapes = true;
+        let has_escapes = true;
         for i in offset..end {
             let b = *data.as_ptr().add(i);
             if b == b'\\' { escaped = !escaped; }
