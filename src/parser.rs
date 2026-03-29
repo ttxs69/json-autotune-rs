@@ -97,6 +97,31 @@ impl<'a> Parser<'a> {
     #[inline(always)]
     fn parse_string(&mut self) -> Result<Value, Error> {
         self.pos += 1;
+        let start = self.pos;
+        let input_len = self.input.len();
+        
+        // Fast path for short strings without escapes - common in small JSON
+        let mut i = 0;
+        let mut found_quote = false;
+        while start + i < input_len {
+            let b = unsafe { *self.input.get_unchecked(start + i) };
+            if b == b'"' { found_quote = true; break; }
+            if b == b'\\' {
+                found_quote = false;
+                break;
+            }
+            i += 1;
+        }
+        
+        if found_quote {
+            let end = i;
+            self.pos = start + end + 1;
+            let raw = unsafe { self.input.get_unchecked(start..start + end) };
+            let s: JsonString = unsafe { std::str::from_utf8_unchecked(raw) }.into();
+            return Ok(Value::String(s));
+        }
+        
+        // Slow path: use full SIMD parser
         let remaining = unsafe { self.input.get_unchecked(self.pos..) };
         let (end, has_escapes) = simd::find_string_end(remaining)
             .ok_or_else(|| Error::new("Unterminated string", self.pos))?;
