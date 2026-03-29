@@ -258,7 +258,7 @@ impl<'a> Parser<'a> {
         let mut fields = Vec::with_capacity(3);
 
         loop {
-            let key = if let Value::String(s) = self.parse_string()? { s } else { unreachable!() };
+            let key = if let Value::String(s) = self.parse_string()? { s } else { unsafe { std::hint::unreachable_unchecked() } };
             
             if unsafe { *self.input.get_unchecked(self.pos) } != b':' {
                 return Err(Error::new("Expected ':'", self.pos));
