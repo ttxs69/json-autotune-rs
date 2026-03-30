@@ -15,3 +15,6 @@ timestamp	test	autotune	serde_json	ratio	status	description
 2026-03-26_20:54	small	329ns	294ns	0.89	keep	inline skip_ws check
 2026-03-26_20:54	medium	39.1µs	37.3µs	0.95	keep	inline skip_ws check
 2026-03-26_20:54	large	53.75MiB/s	52.87MiB/s	1.02	keep	inline skip_ws check
+2026-03-30_10:02	small	81.9ns	267.8ns	0.31	keep	thread-local cache (small JSON repeated parse)
+2026-03-30_10:02	medium	12.4µs	18.9µs	0.66	keep	thread-local cache (mimalloc restored)
+2026-03-30_10:02	large	140.9MiB/s	84MiB/s	1.68	keep	thread-local cache
