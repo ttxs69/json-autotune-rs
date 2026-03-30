@@ -9,10 +9,9 @@ license = "MIT"
 [dependencies]
 lexical-core = "1.0"
 fast-float = "0.2"
-hashbrown = "0.14"
 smartstring = "1.0"
-ahash = "0.7"
-mimalloc = "0.1"
+# mimalloc removed: overhead in single-threaded benchmarks
+# hashbrown/ahash removed: unused (Vec-based linear search faster for small objects)
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

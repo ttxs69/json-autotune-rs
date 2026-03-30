@@ -11,11 +11,6 @@
 //! assert_eq!(value["name"].as_str(), Some("Alice"));
 //! ```
 
-use mimalloc::MiMalloc;
-
-#[global_allocator]
-static GLOBAL: MiMalloc = MiMalloc;
-
 pub mod parser;
 mod value;
 mod error;
